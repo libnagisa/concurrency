@@ -18,8 +18,8 @@ namespace coroutine_detail
 template <class T>
 concept await_suspend_result = ::std::same_as<T, void> || ::std::same_as<T, bool> || coroutine_detail::instance_of<T, ::std::coroutine_handle>;
 
-template <class Awaiter, class... Promise>
-concept awaiter = requires(Awaiter & a, ::std::coroutine_handle<Promise...> h) {
+template <class Awaiter, class ParentPromise = void>
+concept awaiter = requires(Awaiter & a, ::std::coroutine_handle<ParentPromise> h) {
 	a.await_ready() ? 1 : 0;
 	{ a.await_suspend(h) } -> await_suspend_result;
 	a.await_resume();

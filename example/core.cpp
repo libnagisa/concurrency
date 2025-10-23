@@ -14,8 +14,12 @@ struct promise;
 template<class Promise, class Parent>
 using task_awaitable_trait = ::nc::awaitable_trait_combiner_t<Promise, Parent,
 	::nat::ready_if_done
+
+	, ::nat::capture_scheduler
+	, ::nat::capture_stop_token
 	, ::nat::this_then_parent
 	, ::nat::run_this
+
 	, ::nat::release_value
 	, ::nat::rethrow_exception
 	, ::nat::destroy_after_resumed
@@ -29,20 +33,35 @@ struct promise
 	: ::nc::promises::lazy
 	, ::nc::promises::exception<true>
 	, ::nc::promises::value<void>
-	, ::nc::promises::jump_to_continuation
+	, ::nc::promises::jump_to_continuation<>
 	, ::nc::promises::return_object_from_handle<promise, task>
 	, ::nc::promises::schedulable<::stdexec::inline_scheduler>
+	, ::nc::promises::stop_token
 	, ::nc::promises::with_awaitable<promise>
 {
+	constexpr auto get_env() const noexcept
+	{
+		return ::stdexec::env(::nc::promises::schedulable<::stdexec::inline_scheduler>::get_env(), ::nc::promises::stop_token::get_env());
+	}
 };
 
 static_assert(::nc::awaitable<task_awaitable<promise, void>>);
 static_assert(::nc::awaitable<task>);
 
+struct get_current_handle_t
+{
+	auto await_ready() const noexcept { return false; }
+	::std::coroutine_handle<> result;
+	auto await_suspend(::std::coroutine_handle<> parent) noexcept { result = parent;  return parent; }
+	auto await_resume() const noexcept { return result; }
+};
+
 task f1(int i) noexcept
 {
 	::std::println("{}", i);
-	// auto&& sche = co_await ::stdexec::as_awaitable(::stdexec::get_scheduler(), );
+	auto handle = ::std::coroutine_handle<promise>::from_address((co_await get_current_handle_t{}).address());
+	static_assert(::stdexec::__as_awaitable::__awaitable_sender<decltype(::stdexec::get_scheduler()), promise>);
+	auto&& sche = co_await ::stdexec::get_scheduler();
 	if (!i)
 		co_return;
 	co_await f1(i - 1);

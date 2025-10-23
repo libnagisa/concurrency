@@ -11,6 +11,10 @@
 #include "./_coroutine/component/value.h"
 #include "./_coroutine/component/return_object.h"
 #include "./_coroutine/component/schedulable.h"
+#include "./_coroutine/component/continuation.h"
+#include "./_coroutine/component/exit.h"
+#include "./_coroutine/component/custom.h"
+#include "./_coroutine/component/stop_token.h"
 #include "./_coroutine/component/workflow.h"
 #include "./_coroutine/component/with_awaitable.h"
 #include "./environment.h"
@@ -43,6 +47,10 @@ using details::set_continuation;
 using details::set_continuation_t;
 using details::continuation;
 using details::continuation_t;
+using details::set_stop_token;
+using details::set_stop_token_t;
+using details::set_scheduler;
+using details::set_scheduler_t;
 
 
 

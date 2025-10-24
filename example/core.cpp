@@ -3,6 +3,7 @@
 #include <ranges>
 #include <algorithm>
 #include <cassert>
+#include <any>
 #include <stdexec/execution.hpp>
 #include <stdexec/coroutine.hpp>
 
@@ -26,7 +27,76 @@ using task_awaitable_trait = ::nc::awaitable_trait_combiner_t<Promise, Parent,
 >;
 
 template<class Promise, class Parent>
-using task_awaitable = ::nc::awaitable_trait_instance_t<Promise, Parent, task_awaitable_trait>;
+using trait_instance = ::nc::awaitable_trait_instance_t<Promise, Parent, task_awaitable_trait>;
+
+struct forward_stop_request {
+	::stdexec::inplace_stop_source& _stop_source;
+
+	void operator()() const noexcept {
+		_stop_source.request_stop();
+	}
+};
+
+template<class Promise, class Parent>
+struct stop_token_holder
+{};
+
+template<class Promise, class Parent>
+	requires !requires(::std::coroutine_handle<Promise> handle, ::std::coroutine_handle<Parent> parent)
+	{
+		::nat::capture_stop_token<Promise, Parent>::await_suspend(handle, parent);
+	} && requires{ ::nc::set_stop_token(self.promise(), ::stdexec::get_stop_token(::stdexec::get_env(parent.promise()))); }
+struct stop_token_holder<Promise, Parent>
+{
+	using stop_token_t = ::stdexec::stop_token_of_t<::stdexec::env_of_t<Parent>>;
+	using callback_t = ::stdexec::stop_callback_for_t<stop_token_t, forward_stop_request>;
+
+	template<class Parent>
+	stop_token_holder(::std::coroutine_handle<Promise> handle, Parent& promise)	noexcept
+	{
+		if constexpr (!requires{ ::nat::capture_stop_token<Promise, Parent>::await_suspend(handle, ::std::coroutine_handle<Parent>::from_promise(promise)); })
+		{
+			if (auto token = ::stdexec::get_stop_token(::stdexec::get_env(promise)); token.stop_possible())
+			{
+
+				_stop_callback.emplace<callback_t>(::std::move(token), forward_stop_request{ _stop_source });
+				::nc::set_stop_token(handle.promise(), _stop_source.get_token());
+			}
+		}
+	}
+	::stdexec::inplace_stop_source _stop_source{};
+	::std::any _stop_callback{};
+};
+
+template<class Promise>
+struct stop_token_holder<Promise, void>
+{
+	template<class Parent>
+	stop_token_holder(::std::coroutine_handle<Promise> handle, Parent& promise)	noexcept
+	{
+		if constexpr(!requires{ ::nat::capture_stop_token<Promise, Parent>::await_suspend(handle, ::std::coroutine_handle<Parent>::from_promise(promise)); })
+		{
+			if (auto token = ::stdexec::get_stop_token(::stdexec::get_env(promise)); token.stop_possible())
+			{
+				using stop_token_t = decltype(token);
+				using callback_t = ::stdexec::stop_callback_for_t<stop_token_t, forward_stop_request>;
+				_stop_callback.emplace<callback_t>(::std::move(token), forward_stop_request{ _stop_source });
+				::nc::set_stop_token(handle.promise(), _stop_source.get_token());
+			}
+		}
+	}
+	::stdexec::inplace_stop_source _stop_source{};
+	::std::any _stop_callback{};
+};
+template<class Promise, class Parent>
+	requires requires(::std::coroutine_handle<Promise> handle, ::std::coroutine_handle<Parent> parent)
+	{
+		::nat::capture_stop_token<Promise, Parent>::await_suspend(handle, parent);
+	}
+struct stop_token_holder<Promise, Parent>{};
+
+
+
 using task = ::nc::basic_task<promise, task_awaitable>;
 
 struct promise
@@ -35,13 +105,13 @@ struct promise
 	, ::nc::promises::value<void>
 	, ::nc::promises::jump_to_continuation<>
 	, ::nc::promises::return_object_from_handle<promise, task>
-	, ::nc::promises::schedulable<::stdexec::inline_scheduler>
-	, ::nc::promises::stop_token
-	, ::nc::promises::with_awaitable<promise>
+	, ::nc::promises::with_scheduler<>
+	, ::nc::promises::with_stop_token<>
+	, ::nc::promises::use_as_awaitable<promise>
 {
 	constexpr auto get_env() const noexcept
 	{
-		return ::stdexec::env(::nc::promises::schedulable<::stdexec::inline_scheduler>::get_env(), ::nc::promises::stop_token::get_env());
+		return ::stdexec::env(::nc::promises::with_scheduler<>::get_env(), ::nc::promises::with_stop_token<>::get_env());
 	}
 };
 
@@ -55,13 +125,30 @@ struct get_current_handle_t
 	auto await_suspend(::std::coroutine_handle<> parent) noexcept { result = parent;  return parent; }
 	auto await_resume() const noexcept { return result; }
 };
+struct check_stop_t
+{
+	auto await_ready() const noexcept { return false; }
+	template<class Promise>
+	::std::coroutine_handle<> await_suspend(::std::coroutine_handle<Promise> parent) noexcept
+	{
+		if constexpr (requires { ::stdexec::get_stop_token(::stdexec::get_env(parent.promise())); })
+		{
+			static_assert(requires{ { parent.promise().unhandled_stopped() }; });
+			if (::stdexec::get_stop_token(::stdexec::get_env(parent.promise())).stop_requested())
+				return parent.promise().unhandled_stopped();
+		}
+		return parent;
+	}
+	auto await_resume() const noexcept { }
+};
 
 task f1(int i) noexcept
 {
 	::std::println("{}", i);
-	auto handle = ::std::coroutine_handle<promise>::from_address((co_await get_current_handle_t{}).address());
-	static_assert(::stdexec::__as_awaitable::__awaitable_sender<decltype(::stdexec::get_scheduler()), promise>);
+	co_await check_stop_t{};
 	auto&& sche = co_await ::stdexec::get_scheduler();
+	co_await sche.schedule();
+	co_await ::stdexec::just_stopped();
 	if (!i)
 		co_return;
 	co_await f1(i - 1);

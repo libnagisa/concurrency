@@ -55,22 +55,18 @@ namespace awaitable_traits
 namespace promises
 {
 #if NAGISA_CONCURRENCY_USE_EXECUTION
-	template<::stdexec::scheduler Scheduler>
-#else
-	template<class Scheduler>
-#endif
-	struct schedulable
+	template<::stdexec::scheduler Scheduler = ::stdexec::inline_scheduler>
+	struct with_scheduler
 	{
+		using self_type = with_scheduler;
 		using scheduler_type = Scheduler;
 		struct env_type
 		{
-#if NAGISA_CONCURRENCY_USE_EXECUTION
 			constexpr auto&& query(::stdexec::get_scheduler_t) const noexcept
 			{
 				return _self->_scheduler;
 			}
-#endif
-			schedulable const* _self;
+			self_type const* _self;
 		};
 
 		constexpr auto get_env() const noexcept { return env_type{ this }; }
@@ -83,6 +79,7 @@ namespace promises
 
 		scheduler_type _scheduler;
 	};
+#endif
 }
 
 NAGISA_BUILD_LIB_DETAIL_END

@@ -8,11 +8,11 @@ namespace promises
 {
 #if NAGISA_CONCURRENCY_USE_EXECUTION
 	template<class Derived>
-	struct with_awaitable
+	struct use_as_awaitable
 	{
 		constexpr auto await_transform(auto&& val) noexcept
 		{
-			static_assert(::std::derived_from<Derived, with_awaitable>);
+			static_assert(::std::derived_from<Derived, use_as_awaitable>);
 			return ::stdexec::as_awaitable(::std::forward<decltype(val)>(val), static_cast<Derived&>(*this));
 		}
 	};

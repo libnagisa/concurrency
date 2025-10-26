@@ -23,9 +23,28 @@
     <ClInclude Include="include\nagisa\concurrency\environment.h" />
     <ClInclude Include="include\nagisa\concurrency\concurrency.h" />
     <ClInclude Include="include\nagisa\concurrency\_coroutine\awaitable.h" />
+    <ClInclude Include="include\nagisa\concurrency\_coroutine\awaitable_trait.h" />
     <ClInclude Include="include\nagisa\concurrency\_coroutine\awaiter.h" />
+    <ClInclude Include="include\nagisa\concurrency\_coroutine\component\continuation.h" />
+    <ClInclude Include="include\nagisa\concurrency\_coroutine\component\environment.h" />
+    <ClInclude Include="include\nagisa\concurrency\_coroutine\component\exception.h" />
+    <ClInclude Include="include\nagisa\concurrency\_coroutine\component\exit.h" />
+    <ClInclude Include="include\nagisa\concurrency\_coroutine\component\intro.h" />
+    <ClInclude Include="include\nagisa\concurrency\_coroutine\component\custom.h" />
+    <ClInclude Include="include\nagisa\concurrency\_coroutine\component\return_object.h" />
+    <ClInclude Include="include\nagisa\concurrency\_coroutine\component\schedulable.h" />
+    <ClInclude Include="include\nagisa\concurrency\_coroutine\component\stop_token.h" />
+    <ClInclude Include="include\nagisa\concurrency\_coroutine\component\value.h" />
+    <ClInclude Include="include\nagisa\concurrency\_coroutine\component\with_awaitable.h" />
+    <ClInclude Include="include\nagisa\concurrency\_coroutine\component\workflow.h" />
+    <ClInclude Include="include\nagisa\concurrency\_coroutine\coroutine_handle.h" />
     <ClInclude Include="include\nagisa\concurrency\_coroutine\environment.h" />
+    <ClInclude Include="include\nagisa\concurrency\_coroutine\promise.h" />
+    <ClInclude Include="include\nagisa\concurrency\_coroutine\scope_guard.h" />
     <ClInclude Include="include\nagisa\concurrency\_coroutine\task.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="example\core.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>

@@ -36,6 +36,12 @@ namespace at_details
 		{
 			return Trait::create_context(handle, parent);
 		}
+		template<class Promise, class Parent>
+		constexpr decltype(auto) operator()(::std::coroutine_handle<Promise> handle, Parent& parent) const noexcept
+			requires requires{ Trait::create_context(handle); }
+		{
+			return Trait::create_context(handle);
+		}
 	};
 
 	template<class Trait>
@@ -262,6 +268,14 @@ namespace at_details
 
 	template<class F1, class F2, class Promise, class Parent>
 	constexpr decltype(auto) compatible_invoke_with_context(auto&& context, auto&&... args) noexcept
+		requires requires
+	{
+		at_details::compatible_invoke<F1, F2>(
+			::std::get<0>(at_details::transform_context<at_details::requires_context_impl<F1, F2, ::std::coroutine_handle<Promise>, Parent>()>(::std::forward<decltype(context)>(context)))
+			, ::std::get<1>(at_details::transform_context<at_details::requires_context_impl<F1, F2, ::std::coroutine_handle<Promise>, Parent>()>(::std::forward<decltype(context)>(context)))
+			, ::std::forward<decltype(args)>(args)...
+		);
+	}
 	{
 		using handle_type = ::std::coroutine_handle<Promise>;
 		constexpr compatible_requires_context_result result = at_details::requires_context_impl<F1, F2, handle_type, Parent>();
@@ -285,20 +299,12 @@ struct awaitable_trait_combiner<Trait1, Trait2>
 		using t1_await_suspend = at_details::await_suspend_t<trait1_type>;
 		using t1_await_resume = at_details::await_resume_t<trait1_type>;
 		using t1_create_context = at_details::create_context_t<trait1_type>;
-		constexpr static auto t1_requires_context = requires{ requires ::std::invocable<t1_create_context, handle_type, Parent&>; };
-		constexpr static auto t1_requires_context_void = ::std::invocable<t1_create_context, handle_type>;
 
 		using trait2_type = Trait2<Promise, Parent>;
 		using t2_await_ready = at_details::await_ready_t<trait2_type>;
 		using t2_await_suspend = at_details::await_suspend_t<trait2_type>;
 		using t2_await_resume = at_details::await_resume_t<trait2_type>;
 		using t2_create_context = at_details::create_context_t<trait2_type>;
-		constexpr static auto t2_requires_context = requires{ requires ::std::invocable<t2_create_context, handle_type, Parent&>; };
-		constexpr static auto t2_requires_context_void = ::std::invocable<t2_create_context, handle_type>;
-
-		constexpr static auto requires_context =
-			(::std::same_as<void, Parent> && (t1_requires_context_void || t2_requires_context_void))
-			|| (t1_requires_context || t2_requires_context);
 	public:
 		constexpr static decltype(auto) create_context(handle_type handle) noexcept
 			requires requires{ at_details::compatible_create_context<t1_create_context, t2_create_context>(handle); }
@@ -311,31 +317,35 @@ struct awaitable_trait_combiner<Trait1, Trait2>
 			return at_details::compatible_create_context<t1_create_context, t2_create_context>(handle, parent);
 		}
 
-		static_assert(
-			at_details::compatible<t1_await_ready, t2_await_ready, handle_type>
-			&& at_details::compatible<t1_await_suspend, t2_await_suspend, handle_type, parent_handle_type>
-			&& at_details::compatible<t1_await_resume, t2_await_resume, handle_type>
-			);
-
 		constexpr static decltype(auto) await_ready(handle_type handle) noexcept
-		 	requires (!requires_context) && (::std::invocable<t1_await_ready, handle_type> || ::std::invocable<t2_await_ready, handle_type>)
+			requires requires{ at_details::compatible_invoke_with_context<t1_await_ready, t2_await_ready>(at_details::ignore{}, handle); }
 		{
-			return at_details::compatible_invoke<t1_await_ready, t2_await_ready>(handle);
+			return at_details::compatible_invoke_with_context<t1_await_ready, t2_await_ready>(at_details::ignore{}, handle);
 		}
-		constexpr static decltype(auto) await_ready(handle_type handle) noexcept
-			requires requires_context && (::std::invocable<t1_await_ready, handle_type> || ::std::invocable<t2_await_ready, handle_type>)
+		constexpr static decltype(auto) await_ready(auto&& context, handle_type handle) noexcept
+			requires requires{ at_details::compatible_invoke_with_context<t1_await_ready, t2_await_ready>(::std::forward<decltype(context)>(context), handle); }
 		{
-			return at_details::compatible_invoke<t1_await_ready, t2_await_ready>(handle);
+			return at_details::compatible_invoke_with_context<t1_await_ready, t2_await_ready>(::std::forward<decltype(context)>(context), handle);
 		}
 		constexpr static decltype(auto) await_suspend(handle_type handle, parent_handle_type parent) noexcept
-			requires ::std::invocable<t1_await_suspend, handle_type, parent_handle_type> || ::std::invocable<t2_await_suspend, handle_type, parent_handle_type>
+			requires requires{ at_details::compatible_invoke_with_context<t1_await_suspend, t2_await_suspend>(at_details::ignore{}, handle, parent); }
 		{
-			return at_details::compatible_invoke<t1_await_suspend, t2_await_suspend>(handle, parent);
+			return at_details::compatible_invoke_with_context<t1_await_suspend, t2_await_suspend>(at_details::ignore{}, handle, parent);
+		}
+		constexpr static decltype(auto) await_suspend(auto&& context, handle_type handle, parent_handle_type parent) noexcept
+			requires requires{ at_details::compatible_invoke_with_context<t1_await_suspend, t2_await_suspend>(::std::forward<decltype(context)>(context), handle, parent); }
+		{
+			return at_details::compatible_invoke_with_context<t1_await_suspend, t2_await_suspend>(::std::forward<decltype(context)>(context), handle, parent);
 		}
 		constexpr static decltype(auto) await_resume(handle_type handle) noexcept
-			requires ::std::invocable<t1_await_resume, handle_type> || ::std::invocable<t2_await_resume, handle_type>
+			requires requires{ at_details::compatible_invoke_with_context<t1_await_resume, t1_await_resume>(at_details::ignore{}, handle); }
 		{
-			return at_details::compatible_invoke<t1_await_resume, t2_await_resume>(handle);
+			return at_details::compatible_invoke_with_context<t1_await_resume, t1_await_resume>(at_details::ignore{}, handle);
+		}
+		constexpr static decltype(auto) await_resume(auto&& context, handle_type handle) noexcept
+			requires requires{ at_details::compatible_invoke_with_context<t1_await_resume, t1_await_resume>(::std::forward<decltype(context)>(context), handle); }
+		{
+			return at_details::compatible_invoke_with_context<t1_await_resume, t1_await_resume>(::std::forward<decltype(context)>(context), handle);
 		}
 	};
 };
@@ -348,40 +358,110 @@ struct awaitable_trait_combiner<Trait1, Trait2, Rest...>
 template<class Promise, class Parent, template<class, class>class... Traits>
 using awaitable_trait_combiner_t = awaitable_trait_combiner<Traits...>::template type<Promise, Parent>;
 
+template<class Trait, class Promise, class Parent>
+struct awaitable_trait_context;
+
+
+template<class Trait, class Promise, class Parent>
+	requires ::std::invocable<at_details::create_context_t<Trait>, ::std::coroutine_handle<Promise>, Parent&>
+struct awaitable_trait_context<Trait, Promise, Parent>
+{
+	using type = ::std::invoke_result_t<at_details::create_context_t<Trait>, ::std::coroutine_handle<Promise>, Parent&>;
+};
+
+template<class Trait, class Promise>
+	requires ::std::invocable<at_details::create_context_t<Trait>, ::std::coroutine_handle<Promise>>
+struct awaitable_trait_context<Trait, Promise, void>
+{
+	using type = ::std::invoke_result_t<at_details::create_context_t<Trait>, ::std::coroutine_handle<Promise>>;
+};
+
+template<class Trait, class Promise, class Parent>
+	requires requires{ typename awaitable_trait_context<Trait, Promise, Parent>::type; }
+using awaitable_trait_context_t = typename awaitable_trait_context<Trait, Promise, Parent>::type;
+
+template<template<class, class>class Trait, class Promise, class Parent>
+struct awaitable_trait_instance_t
+{
+private:
+	using trait_type = Trait<Promise, Parent>;
+	using trait_await_ready = at_details::await_ready_t<trait_type>;
+	using trait_await_suspend = at_details::await_suspend_t<trait_type>;
+	using trait_await_resume = at_details::await_resume_t<trait_type>;
+	using handle_type = ::std::coroutine_handle<Promise>;
+	using parent_handle_type = ::std::coroutine_handle<Parent>;
+public:
+	constexpr decltype(auto) await_ready() const noexcept
+		requires ::std::invocable<trait_await_ready, handle_type>
+	{
+		return ::std::invoke(trait_await_ready{}, _coroutine);
+	}
+	constexpr decltype(auto) await_suspend(parent_handle_type parent) noexcept
+		requires ::std::invocable<trait_await_suspend, handle_type, parent_handle_type>
+	{
+		return ::std::invoke(trait_await_suspend{}, _coroutine, parent);
+	}
+	constexpr decltype(auto) await_resume() const noexcept
+		requires ::std::invocable<trait_await_resume, handle_type>
+	{
+		return ::std::invoke(trait_await_resume{}, _coroutine);
+	}
+	handle_type _coroutine;
+};
+
+
+template<template<class, class>class Trait, class Promise, class Parent>
+	requires requires{ typename awaitable_trait_context<Trait<Promise, Parent>, Promise, Parent>; }
+struct awaitable_trait_instance_t<Trait, Promise, Parent>
+{
+private:
+	using trait_type = Trait<Promise, Parent>;
+	using trait_await_ready = at_details::await_ready_t<trait_type>;
+	using trait_await_suspend = at_details::await_suspend_t<trait_type>;
+	using trait_await_resume = at_details::await_resume_t<trait_type>;
+	using handle_type = ::std::coroutine_handle<Promise>;
+	using parent_handle_type = ::std::coroutine_handle<Parent>;
+	using context_type = awaitable_trait_context<Trait<Promise, Parent>, Promise, Parent>;
+public:
+	constexpr awaitable_trait_instance_t(handle_type handle, Parent& parent) noexcept
+		: _context(::std::invoke(at_details::create_context_t<trait_type>{}, handle, parent))
+		, _coroutine(handle)
+	{}
+
+	constexpr decltype(auto) await_ready() noexcept
+		requires ::std::invocable<trait_await_ready, context_type&, handle_type>
+	{
+		return ::std::invoke(trait_await_ready{}, _context, _coroutine);
+	}
+	constexpr decltype(auto) await_ready() const noexcept
+		requires ::std::invocable<trait_await_ready, context_type const&, handle_type>
+	{
+		return ::std::invoke(trait_await_ready{}, _context, _coroutine);
+	}
+	constexpr decltype(auto) await_suspend(parent_handle_type parent) noexcept
+		requires ::std::invocable<trait_await_suspend, context_type&, handle_type, parent_handle_type>
+	{
+		return ::std::invoke(trait_await_suspend{}, _context, _coroutine, parent);
+	}
+	constexpr decltype(auto) await_resume() noexcept
+		requires ::std::invocable<trait_await_resume, context_type&, handle_type>
+	{
+		return ::std::invoke(trait_await_resume{}, _context, _coroutine);
+	}
+	constexpr decltype(auto) await_resume() const noexcept
+		requires ::std::invocable<trait_await_resume, context_type const&, handle_type>
+	{
+		return ::std::invoke(trait_await_resume{}, _context, _coroutine);
+	}
+	context_type _context;
+	handle_type _coroutine;
+};
+
 template<template<class, class>class Trait>
 struct awaitable_trait_instance
 {
 	template<class Promise, class Parent>
-	struct type
-	{
-	private:
-		using trait_type = Trait<Promise, Parent>;
-		using trait_await_ready = at_details::await_ready_t<trait_type>;
-		using trait_await_suspend = at_details::await_suspend_t<trait_type>;
-		using trait_await_resume = at_details::await_resume_t<trait_type>;
-		using handle_type = ::std::coroutine_handle<Promise>;
-		using parent_handle_type = ::std::coroutine_handle<Parent>;
-	public:
-		constexpr decltype(auto) await_ready() const noexcept
-			requires ::std::invocable<trait_await_ready, handle_type>
-		{
-			return ::std::invoke(trait_await_ready{}, _coroutine);
-		}
-		constexpr decltype(auto) await_suspend(parent_handle_type parent) noexcept
-			requires ::std::invocable<trait_await_suspend, handle_type, parent_handle_type>
-		{
-			return ::std::invoke(trait_await_suspend{}, _coroutine, parent);
-		}
-		constexpr decltype(auto) await_resume() const noexcept
-			requires ::std::invocable<trait_await_resume, handle_type>
-		{
-			return ::std::invoke(trait_await_resume{}, _coroutine);
-		}
-		handle_type _coroutine;
-	};
+	using type = awaitable_trait_instance_t<Trait, Promise, Parent>;
 };
-
-template<class Promise, class Parent, template<class, class>class Trait>
-using awaitable_trait_instance_t = awaitable_trait_instance<Trait>::template type<Promise, Parent>;
 
 NAGISA_BUILD_LIB_DETAIL_END

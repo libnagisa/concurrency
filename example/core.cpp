@@ -27,7 +27,7 @@ using task_awaitable_trait = ::nc::awaitable_trait_combiner_t<Promise, Parent,
 >;
 
 template<class Promise, class Parent>
-using trait_instance = ::nc::awaitable_trait_instance_t<Promise, Parent, task_awaitable_trait>;
+using trait_instance = ::nc::awaitable_trait_instance_t<task_awaitable_trait, Promise, Parent>;
 
 struct forward_stop_request {
 	::stdexec::inplace_stop_source& _stop_source;
@@ -41,6 +41,13 @@ template<class Promise, class Parent>
 struct stop_token_holder
 {};
 
+
+struct context_type
+{
+	::stdexec::inplace_stop_source stop_source{};
+	::std::any stop_callback{};
+};
+
 template<class Promise, class Parent>
 	requires !requires(::std::coroutine_handle<Promise> handle, ::std::coroutine_handle<Parent> parent)
 	{
@@ -50,6 +57,13 @@ struct stop_token_holder<Promise, Parent>
 {
 	using stop_token_t = ::stdexec::stop_token_of_t<::stdexec::env_of_t<Parent>>;
 	using callback_t = ::stdexec::stop_callback_for_t<stop_token_t, forward_stop_request>;
+
+	struct context_type
+	{
+		::stdexec::inplace_stop_source stop_source{};
+		::std::any stop_callback{};
+	};
+	static auto create_context()
 
 	template<class Parent>
 	stop_token_holder(::std::coroutine_handle<Promise> handle, Parent& promise)	noexcept
@@ -72,21 +86,22 @@ template<class Promise>
 struct stop_token_holder<Promise, void>
 {
 	template<class Parent>
-	stop_token_holder(::std::coroutine_handle<Promise> handle, Parent& promise)	noexcept
+	constexpr static auto create_context(::std::coroutine_handle<Promise> handle, Parent& promise) noexcept
 	{
+		context_type result{};
 		if constexpr(!requires{ ::nat::capture_stop_token<Promise, Parent>::await_suspend(handle, ::std::coroutine_handle<Parent>::from_promise(promise)); })
 		{
 			if (auto token = ::stdexec::get_stop_token(::stdexec::get_env(promise)); token.stop_possible())
 			{
 				using stop_token_t = decltype(token);
 				using callback_t = ::stdexec::stop_callback_for_t<stop_token_t, forward_stop_request>;
-				_stop_callback.emplace<callback_t>(::std::move(token), forward_stop_request{ _stop_source });
-				::nc::set_stop_token(handle.promise(), _stop_source.get_token());
+				result.stop_callback.emplace<callback_t>(::std::move(token), forward_stop_request{ result.stop_source });
+				::nc::set_stop_token(handle.promise(), result.stop_source.get_token());
 			}
 		}
+		return result;
 	}
-	::stdexec::inplace_stop_source _stop_source{};
-	::std::any _stop_callback{};
+
 };
 template<class Promise, class Parent>
 	requires requires(::std::coroutine_handle<Promise> handle, ::std::coroutine_handle<Parent> parent)

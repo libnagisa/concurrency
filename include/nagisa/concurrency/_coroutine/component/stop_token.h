@@ -33,23 +33,118 @@ inline constexpr struct set_stop_token_t
 	}
 } set_stop_token{};
 
+template<class Source>
+struct forward_stop_request {
+	Source& stop_source;
+
+	constexpr decltype(auto) operator()() const noexcept
+	{
+		return stop_source.request_stop();
+	}
+};
+
+template<class Source, class Callback>
+struct connect_stop_token
+{
+	Source stop_source{};
+	Callback stop_callback;
+};
+
+
+template<class Promise, class Parent>
+concept direct_cpatrue_stop_token = requires(Promise& promise, Parent& parent)
+{
+	set_stop_token(promise, ::stdexec::get_stop_token(::stdexec::get_env(parent)));
+};
+
+template<class Parent, class Callback>
+concept indirect_stop_token_provider =
+	::stdexec::stoppable_token<::stdexec::stop_token_of_t<::stdexec::env_of_t<Parent>>>
+	&& requires{ typename ::stdexec::stop_callback_for_t<::stdexec::stop_token_of_t<::stdexec::env_of_t<Parent>>, Callback>; }
+;
+
 namespace awaitable_traits
 {
 #if NAGISA_CONCURRENCY_USE_EXECUTION
 
-	template<class Promise, class ParentPromise>
-	struct capture_stop_token
+	template<class Source, class Promise, class ParentPromise>
+	struct capture_stop_token_t {};
+
+	template<class Source, class Promise>
+	struct capture_stop_token_t<Source, Promise, void>
+	{
+		using promise_type = Promise;
+		using handle_type = ::std::coroutine_handle<promise_type>;
+		using context_type = connect_stop_token<Source, ::std::any>;
+
+		constexpr static auto create_context(handle_type self) noexcept
+		{
+			return context_type{};
+		}
+
+		template<class ParentPromise>
+		constexpr static decltype(auto) await_suspend(context_type& context, handle_type self, ::std::coroutine_handle<ParentPromise> parent) noexcept
+		{
+			if constexpr (direct_cpatrue_stop_token<Promise, ParentPromise>)
+			{
+				set_stop_token(self.promise(), ::stdexec::get_stop_token(::stdexec::get_env(parent.promise())));
+			}
+			else if constexpr(indirect_stop_token_provider<ParentPromise, forward_stop_request<Source>>)
+			{
+				// using stop_token_type = ::stdexec::stop_token_of_t<::stdexec::env_of_t<ParentPromise>>;
+				// using callback_type = ::stdexec::stop_callback_for_t<stop_token_type, forward_stop_request<Source>>;
+				// context.stop_callback.template emplace<callback_type>(::stdexec::get_stop_token(::stdexec::get_env(parent.promise())), forward_stop_request<Source>(context.stop_source));
+				// set_stop_token(self.promise(), context.stop_source.get_token());
+			}
+		}
+	};
+	template<class Source, class Promise, class ParentPromise>
+		requires direct_cpatrue_stop_token<Promise, ParentPromise>
+	struct capture_stop_token_t<Source, Promise, ParentPromise>
 	{
 		using promise_type = Promise;
 		using handle_type = ::std::coroutine_handle<promise_type>;
 
 		constexpr static decltype(auto) await_suspend(handle_type self, ::std::coroutine_handle<ParentPromise> parent) noexcept
-			requires requires{ set_stop_token(self.promise(), ::stdexec::get_stop_token(::stdexec::get_env(parent.promise()))); }
 		{
 			set_stop_token(self.promise(), ::stdexec::get_scheduler(::stdexec::get_env(parent.promise())));
 		}
 	};
+	template<class Source, class Promise, class ParentPromise>
+		requires (!direct_cpatrue_stop_token<Promise, ParentPromise>) && indirect_stop_token_provider<ParentPromise, forward_stop_request<Source>>
+		&& requires(Promise promise, Source source)
+		{
+			set_stop_token(promise, source.get_token());
+		}
+	struct capture_stop_token_t<Source, Promise, ParentPromise>
+	{
+		using promise_type = Promise;
+		using handle_type = ::std::coroutine_handle<promise_type>;
+		using stop_token_type = ::stdexec::stop_token_of_t<::stdexec::env_of_t<ParentPromise>>;
+		using callback_type = ::stdexec::stop_callback_for_t<stop_token_type, forward_stop_request<Source>>;
+		using context_type = connect_stop_token<Source, ::std::optional<callback_type>>;
 
+		constexpr static auto create_context(handle_type self, ParentPromise& parent) noexcept
+		{
+			return context_type{};
+		}
+
+		constexpr static decltype(auto) await_suspend(context_type& context, handle_type self, ::std::coroutine_handle<ParentPromise> parent) noexcept
+		{
+			context.stop_callback.emplace(::stdexec::get_stop_token(::stdexec::get_env(parent.promise())), forward_stop_request<Source>(context.stop_source));
+			set_stop_token(self.promise(), context.stop_source.get_token());
+		}
+	};
+
+	template<class Source>
+	struct capture_stop_token
+	{
+		template<class Promise, class Parent>
+		using type = capture_stop_token_t<Source, Promise, Parent>;
+	};
+
+	template<class Promise, class Parent>
+	using capture_inplace_stop_token = capture_stop_token_t<::stdexec::inplace_stop_source, Promise, Parent>;
 #endif
 }
 

@@ -100,16 +100,23 @@ namespace at_details
 	concept ignore_context = ::std::same_as<::std::remove_cvref_t<T>, ignore>;
 
 	template<class Callable, class Context, class... Args>
-	concept invocable = ignore_context<Context> ? ::std::invocable<Callable, Args...> : ::std::invocable<Callable, Context, Args...>;
+	concept invocable = [] {
+		if constexpr (ignore_context<Context>)
+			return ::std::invocable<Callable, Args...>;
+		else
+			return ::std::invocable<Callable, Context, Args...>;
+		}();
 
 	template<class Callable, class Context, class... Args>
 	struct invoke_result
 	{
+		static_assert(::std::invocable<Callable, Context, Args...>);
 		using type = ::std::invoke_result_t<Callable, Context, Args...>;
 	};
 	template<class Callable, ignore_context Context, class... Args>
-	struct invoke_result
+	struct invoke_result<Callable, Context, Args...>
 	{
+		static_assert(::std::invocable<Callable, Args...>);
 		using type = ::std::invoke_result_t<Callable, Args...>;
 	};
 	template<class Callable, class Context, class... Args>
@@ -140,7 +147,7 @@ namespace at_details
 		else
 		{
 			return ::std::same_as<void, invoke_result_t<F1, C1, Args...>>
-				|| ::std::same_as<void, invoke_result_t<F2, C1, Args...>>;
+				|| ::std::same_as<void, invoke_result_t<F2, C2, Args...>>;
 		}
 	}
 
@@ -189,9 +196,9 @@ namespace at_details
 	consteval compatible_requires_context_result requires_context_impl_impl() noexcept
 	{
 		using handle_type = Handle;
-		if constexpr (!::std::invocable<F2, handle_type, Parent...>)
+		if constexpr (!::std::invocable<F2, handle_type, Parent&...>)
 		{
-			if constexpr (!::std::invocable<F1, handle_type, Parent...>)
+			if constexpr (!::std::invocable<F1, handle_type, Parent&...>)
 			{
 				return compatible_requires_context_result::none;
 			}
@@ -200,7 +207,7 @@ namespace at_details
 				return compatible_requires_context_result::left;
 			}
 		}
-		else if constexpr (!::std::invocable<F1, handle_type, Parent...>)
+		else if constexpr (!::std::invocable<F1, handle_type, Parent&...>)
 		{
 			return compatible_requires_context_result::right;
 		}
@@ -243,44 +250,62 @@ namespace at_details
 	}
 
 	template<compatible_requires_context_result Result>
-	constexpr decltype(auto) transform_context(auto&& context) noexcept
+	constexpr decltype(auto) context_left(auto&& context) noexcept
 	{
 		if constexpr (Result == compatible_requires_context_result::both)
-		{
-			return ::std::forward<decltype(context)>(context);
-		}
+			return ::std::get<0>(::std::forward<decltype(context)>(context));
 		else if constexpr (Result == compatible_requires_context_result::left)
-		{
-			return ::std::make_tuple(::std::forward<decltype(context)>(context), ignore{});
-		}
+			return ::std::forward<decltype(context)>(context);
+		else
+			return ignore{};
+	}
+
+	template<compatible_requires_context_result Result>
+	constexpr decltype(auto) context_right(auto&& context) noexcept
+	{
+		if constexpr (Result == compatible_requires_context_result::both)
+			return ::std::get<1>(::std::forward<decltype(context)>(context));
 		else if constexpr (Result == compatible_requires_context_result::right)
-		{
-			return ::std::make_tuple(ignore{}, ::std::forward<decltype(context)>(context));
-		}
-		else if constexpr (Result == compatible_requires_context_result::none)
-		{
-			return ::std::make_tuple(ignore{}, ignore{});
-		}
+			return ::std::forward<decltype(context)>(context);
+		else
+			return ignore{};
 	}
 
 	template<class F1, class F2, class Handle, class Parent>
 	concept requires_context = at_details::requires_context_impl<F1, F2, Handle, Parent>() != compatible_requires_context_result::none;
 
-	template<class F1, class F2, class Promise, class Parent>
-	constexpr decltype(auto) compatible_invoke_with_context(auto&& context, auto&&... args) noexcept
+	template<class F1, class F2, compatible_requires_context_result Result>
+	constexpr decltype(auto) compatible_invoke_with_context_impl(auto&& context, auto&&... args) noexcept
 		requires requires
 	{
 		at_details::compatible_invoke<F1, F2>(
-			::std::get<0>(at_details::transform_context<at_details::requires_context_impl<F1, F2, ::std::coroutine_handle<Promise>, Parent>()>(::std::forward<decltype(context)>(context)))
-			, ::std::get<1>(at_details::transform_context<at_details::requires_context_impl<F1, F2, ::std::coroutine_handle<Promise>, Parent>()>(::std::forward<decltype(context)>(context)))
+			at_details::context_left<Result>(::std::forward<decltype(context)>(context))
+			, at_details::context_right<Result>(::std::forward<decltype(context)>(context))
 			, ::std::forward<decltype(args)>(args)...
 		);
 	}
 	{
-		using handle_type = ::std::coroutine_handle<Promise>;
-		constexpr compatible_requires_context_result result = at_details::requires_context_impl<F1, F2, handle_type, Parent>();
-		auto&& [first, second] = at_details::transform_context<result>(::std::forward<decltype(context)>(context));
-		return at_details::compatible_invoke<F1, F2>(::std::forward<decltype(first)>(first), ::std::forward<decltype(second)>(second), ::std::forward<decltype(args)>(args)...);
+		return at_details::compatible_invoke<F1, F2>(
+			at_details::context_left<Result>(::std::forward<decltype(context)>(context))
+			, at_details::context_right<Result>(::std::forward<decltype(context)>(context))
+			, ::std::forward<decltype(args)>(args)...
+		);
+	}
+
+	template<class T1, class T2, template<class>class F, class Promise, class Parent>
+	constexpr decltype(auto) compatible_invoke_with_context(auto&& context, auto&&... args) noexcept
+		requires requires
+	{
+		at_details::compatible_invoke_with_context_impl<
+			F<T1>, F<T2>
+			, at_details::requires_context_impl<create_context_t<T1>, create_context_t<T2>, ::std::coroutine_handle<Promise>, Parent>()>(
+			::std::forward<decltype(context)>(context)
+			, ::std::forward<decltype(args)>(args)...
+		);
+	}
+	{
+		constexpr compatible_requires_context_result result = at_details::requires_context_impl<create_context_t<T1>, create_context_t<T2>, ::std::coroutine_handle<Promise>, Parent>();
+		return at_details::compatible_invoke_with_context_impl<F<T1>, F<T2>, result>(::std::forward<decltype(context)>(context), ::std::forward<decltype(args)>(args)...);
 	}
 }
 
@@ -292,18 +317,11 @@ struct awaitable_trait_combiner<Trait1, Trait2>
 	{
 	private:
 		using handle_type = ::std::coroutine_handle<Promise>;
-		using parent_handle_type = ::std::coroutine_handle<Parent>;
 
 		using trait1_type = Trait1<Promise, Parent>;
-		using t1_await_ready = at_details::await_ready_t<trait1_type>;
-		using t1_await_suspend = at_details::await_suspend_t<trait1_type>;
-		using t1_await_resume = at_details::await_resume_t<trait1_type>;
 		using t1_create_context = at_details::create_context_t<trait1_type>;
 
 		using trait2_type = Trait2<Promise, Parent>;
-		using t2_await_ready = at_details::await_ready_t<trait2_type>;
-		using t2_await_suspend = at_details::await_suspend_t<trait2_type>;
-		using t2_await_resume = at_details::await_resume_t<trait2_type>;
 		using t2_create_context = at_details::create_context_t<trait2_type>;
 	public:
 		constexpr static decltype(auto) create_context(handle_type handle) noexcept
@@ -311,41 +329,43 @@ struct awaitable_trait_combiner<Trait1, Trait2>
 		{
 			return at_details::compatible_create_context<t1_create_context, t2_create_context>(handle);
 		}
-		constexpr static decltype(auto) create_context(handle_type handle, Parent& parent) noexcept
-			requires requires{ at_details::compatible_create_context<t1_create_context, t2_create_context>(handle, parent); }
+		constexpr static decltype(auto) create_context(handle_type handle, auto& parent) noexcept
+			requires (!::std::same_as<Parent, void>) && requires{ at_details::compatible_create_context<t1_create_context, t2_create_context>(handle, parent); }
 		{
 			return at_details::compatible_create_context<t1_create_context, t2_create_context>(handle, parent);
 		}
 
 		constexpr static decltype(auto) await_ready(handle_type handle) noexcept
-			requires requires{ at_details::compatible_invoke_with_context<t1_await_ready, t2_await_ready>(at_details::ignore{}, handle); }
+			requires requires{ at_details::compatible_invoke_with_context<trait1_type, trait2_type, at_details::await_ready_t, Promise, Parent>(at_details::ignore{}, handle); }
 		{
-			return at_details::compatible_invoke_with_context<t1_await_ready, t2_await_ready>(at_details::ignore{}, handle);
+			return at_details::compatible_invoke_with_context<trait1_type, trait2_type, at_details::await_ready_t, Promise, Parent>(at_details::ignore{}, handle);
 		}
 		constexpr static decltype(auto) await_ready(auto&& context, handle_type handle) noexcept
-			requires requires{ at_details::compatible_invoke_with_context<t1_await_ready, t2_await_ready>(::std::forward<decltype(context)>(context), handle); }
+			requires requires{ at_details::compatible_invoke_with_context<trait1_type, trait2_type, at_details::await_ready_t, Promise, Parent>(::std::forward<decltype(context)>(context), handle); }
 		{
-			return at_details::compatible_invoke_with_context<t1_await_ready, t2_await_ready>(::std::forward<decltype(context)>(context), handle);
+			return at_details::compatible_invoke_with_context<trait1_type, trait2_type, at_details::await_ready_t, Promise, Parent>(::std::forward<decltype(context)>(context), handle);
 		}
-		constexpr static decltype(auto) await_suspend(handle_type handle, parent_handle_type parent) noexcept
-			requires requires{ at_details::compatible_invoke_with_context<t1_await_suspend, t2_await_suspend>(at_details::ignore{}, handle, parent); }
+		template<class Parent2>
+		constexpr static decltype(auto) await_suspend(handle_type handle, ::std::coroutine_handle<Parent2> parent) noexcept
+			requires requires{ at_details::compatible_invoke_with_context<trait1_type, trait2_type, at_details::await_suspend_t, Promise, Parent>(at_details::ignore{}, handle, parent); }
 		{
-			return at_details::compatible_invoke_with_context<t1_await_suspend, t2_await_suspend>(at_details::ignore{}, handle, parent);
+			return at_details::compatible_invoke_with_context<trait1_type, trait2_type, at_details::await_suspend_t, Promise, Parent>(at_details::ignore{}, handle, parent);
 		}
-		constexpr static decltype(auto) await_suspend(auto&& context, handle_type handle, parent_handle_type parent) noexcept
-			requires requires{ at_details::compatible_invoke_with_context<t1_await_suspend, t2_await_suspend>(::std::forward<decltype(context)>(context), handle, parent); }
+		template<class Parent2>
+		constexpr static decltype(auto) await_suspend(auto&& context, handle_type handle, ::std::coroutine_handle<Parent2> parent) noexcept
+			requires requires{ at_details::compatible_invoke_with_context<trait1_type, trait2_type, at_details::await_suspend_t, Promise, Parent>(::std::forward<decltype(context)>(context), handle, parent); }
 		{
-			return at_details::compatible_invoke_with_context<t1_await_suspend, t2_await_suspend>(::std::forward<decltype(context)>(context), handle, parent);
+			return at_details::compatible_invoke_with_context<trait1_type, trait2_type, at_details::await_suspend_t, Promise, Parent>(::std::forward<decltype(context)>(context), handle, parent);
 		}
 		constexpr static decltype(auto) await_resume(handle_type handle) noexcept
-			requires requires{ at_details::compatible_invoke_with_context<t1_await_resume, t1_await_resume>(at_details::ignore{}, handle); }
+			requires requires{ at_details::compatible_invoke_with_context<trait1_type, trait2_type, at_details::await_resume_t, Promise, Parent>(at_details::ignore{}, handle); }
 		{
-			return at_details::compatible_invoke_with_context<t1_await_resume, t1_await_resume>(at_details::ignore{}, handle);
+			return at_details::compatible_invoke_with_context<trait1_type, trait2_type, at_details::await_resume_t, Promise, Parent>(at_details::ignore{}, handle);
 		}
 		constexpr static decltype(auto) await_resume(auto&& context, handle_type handle) noexcept
-			requires requires{ at_details::compatible_invoke_with_context<t1_await_resume, t1_await_resume>(::std::forward<decltype(context)>(context), handle); }
+			requires requires{ at_details::compatible_invoke_with_context<trait1_type, trait2_type, at_details::await_resume_t, Promise, Parent>(::std::forward<decltype(context)>(context), handle); }
 		{
-			return at_details::compatible_invoke_with_context<t1_await_resume, t1_await_resume>(::std::forward<decltype(context)>(context), handle);
+			return at_details::compatible_invoke_with_context<trait1_type, trait2_type, at_details::await_resume_t, Promise, Parent>(::std::forward<decltype(context)>(context), handle);
 		}
 	};
 };
@@ -363,7 +383,7 @@ struct awaitable_trait_context;
 
 
 template<class Trait, class Promise, class Parent>
-	requires ::std::invocable<at_details::create_context_t<Trait>, ::std::coroutine_handle<Promise>, Parent&>
+	requires (!::std::same_as<Parent, void>) && ::std::invocable<at_details::create_context_t<Trait>, ::std::coroutine_handle<Promise>, Parent&>
 struct awaitable_trait_context<Trait, Promise, Parent>
 {
 	using type = ::std::invoke_result_t<at_details::create_context_t<Trait>, ::std::coroutine_handle<Promise>, Parent&>;
@@ -411,47 +431,64 @@ public:
 
 
 template<template<class, class>class Trait, class Promise, class Parent>
-	requires requires{ typename awaitable_trait_context<Trait<Promise, Parent>, Promise, Parent>; }
+	requires requires{ typename awaitable_trait_context_t<Trait<Promise, Parent>, Promise, Parent>; }
 struct awaitable_trait_instance_t<Trait, Promise, Parent>
 {
 private:
+	using self_type = awaitable_trait_instance_t;
 	using trait_type = Trait<Promise, Parent>;
 	using trait_await_ready = at_details::await_ready_t<trait_type>;
 	using trait_await_suspend = at_details::await_suspend_t<trait_type>;
 	using trait_await_resume = at_details::await_resume_t<trait_type>;
 	using handle_type = ::std::coroutine_handle<Promise>;
-	using parent_handle_type = ::std::coroutine_handle<Parent>;
-	using context_type = awaitable_trait_context<Trait<Promise, Parent>, Promise, Parent>;
+	using context_type = awaitable_trait_context_t<Trait<Promise, Parent>, Promise, Parent>;
 public:
-	constexpr awaitable_trait_instance_t(handle_type handle, Parent& parent) noexcept
+	constexpr awaitable_trait_instance_t(handle_type handle) noexcept
+		: _context(::std::invoke(at_details::create_context_t<trait_type>{}, handle))
+		, _coroutine(handle)
+	{}
+	constexpr awaitable_trait_instance_t(handle_type handle, auto& parent) noexcept
 		: _context(::std::invoke(at_details::create_context_t<trait_type>{}, handle, parent))
 		, _coroutine(handle)
 	{}
 
-	constexpr decltype(auto) await_ready() noexcept
-		requires ::std::invocable<trait_await_ready, context_type&, handle_type>
+public:
+	template<class F>
+	constexpr static decltype(auto) invoke(auto& self, auto&&... args) noexcept
+		requires ::std::invocable<F, decltype((self._context)), decltype(args)...> || ::std::invocable<F, decltype(args)...>
 	{
-		return ::std::invoke(trait_await_ready{}, _context, _coroutine);
+		if constexpr (::std::invocable<F, decltype((self._context)), decltype(args)...>)
+			return ::std::invoke(F{}, self._context, ::std::forward<decltype(args)>(args)...);
+		else
+			return ::std::invoke(F{}, ::std::forward<decltype(args)>(args)...);
+	}
+public:
+
+	constexpr decltype(auto) await_ready() noexcept
+		requires requires{ self_type::template invoke<trait_await_ready>(*this, handle_type{}); }
+	{
+		return self_type::template invoke<trait_await_ready>(*this, _coroutine);
 	}
 	constexpr decltype(auto) await_ready() const noexcept
-		requires ::std::invocable<trait_await_ready, context_type const&, handle_type>
+		requires requires{ self_type::template invoke<trait_await_ready>(*this, handle_type{}); }
 	{
-		return ::std::invoke(trait_await_ready{}, _context, _coroutine);
+		return self_type::template invoke<trait_await_ready>(*this, _coroutine);
 	}
-	constexpr decltype(auto) await_suspend(parent_handle_type parent) noexcept
-		requires ::std::invocable<trait_await_suspend, context_type&, handle_type, parent_handle_type>
+	template<class ParentPromise>
+	constexpr decltype(auto) await_suspend(::std::coroutine_handle<ParentPromise> parent) noexcept
+		requires requires{ self_type::template invoke<trait_await_suspend>(*this, handle_type{}, parent); }
 	{
-		return ::std::invoke(trait_await_suspend{}, _context, _coroutine, parent);
+		return self_type::template invoke<trait_await_suspend>(*this, _coroutine, parent);
 	}
 	constexpr decltype(auto) await_resume() noexcept
-		requires ::std::invocable<trait_await_resume, context_type&, handle_type>
+		requires requires{ self_type::template invoke<trait_await_resume>(*this, handle_type{}); }
 	{
-		return ::std::invoke(trait_await_resume{}, _context, _coroutine);
+		return self_type::template invoke<trait_await_resume>(*this, _coroutine);
 	}
 	constexpr decltype(auto) await_resume() const noexcept
-		requires ::std::invocable<trait_await_resume, context_type const&, handle_type>
+		requires requires{ self_type::template invoke<trait_await_resume>(*this, handle_type{}); }
 	{
-		return ::std::invoke(trait_await_resume{}, _context, _coroutine);
+		return self_type::template invoke<trait_await_resume>(*this, _coroutine);
 	}
 	context_type _context;
 	handle_type _coroutine;

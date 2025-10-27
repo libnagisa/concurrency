@@ -15,7 +15,7 @@ concept awaiter = requires(Awaiter & a, ::std::coroutine_handle<ParentPromise> h
 	a.await_resume();
 };
 
-template<class T, class... P> requires awaiter<T, P...>
+template<class T, class P> requires awaiter<T, P>
 using awaiter_result_t = decltype(::std::declval<T&>().await_resume());
 
 NAGISA_BUILD_LIB_DETAIL_END

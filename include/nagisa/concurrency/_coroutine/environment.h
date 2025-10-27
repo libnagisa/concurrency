@@ -10,6 +10,7 @@
 #include <exception>
 #include <type_traits>
 #include <tuple>
+#include <any>
 
 #if !defined(NAGISA_CONCURRENCY_USE_EXECUTION)
 #	if __has_include(<stdexec/execution.hpp>)

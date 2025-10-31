@@ -24,6 +24,19 @@ namespace promises
 	{
 		constexpr static auto final_suspend() noexcept { return ::std::suspend_always{}; }
 	};
+	struct exit_then_destroy
+	{
+		constexpr static auto final_suspend() noexcept
+		{
+			struct awaitable
+			{
+				constexpr static auto await_ready() noexcept { return false; }
+				static auto await_suspend(::std::coroutine_handle<> handle) noexcept { handle.destroy(); }
+				[[noreturn]] static auto await_resume() noexcept { ::std::abort(); }
+			};
+			return awaitable{};
+		}
+	};
 }
 
 NAGISA_BUILD_LIB_DETAIL_END

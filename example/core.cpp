@@ -5,6 +5,7 @@
 #include <any>
 #include <stdexec/execution.hpp>
 #include <stdexec/coroutine.hpp>
+#include <exec/static_thread_pool.hpp>
 
 namespace nc = ::nagisa::concurrency;
 namespace nat = ::nc::awaitable_traits;
@@ -55,6 +56,7 @@ struct get_current_handle_t
 	auto await_suspend(::std::coroutine_handle<> parent) noexcept { result = parent;  return parent; }
 	auto await_resume() const noexcept { return result; }
 };
+
 struct check_stop_t
 {
 	auto await_ready() const noexcept { return false; }
@@ -81,14 +83,18 @@ task f1(int i) noexcept
 	if (!i)
 		co_return;
 	co_await f1(i - 1);
+	co_return;
 }
-
-
 
 int main()
 {
-	auto task = f1(5);
-	task._coroutine.resume();
+	auto task = f1(5).operator co_await();
+	if (!task.await_ready())
+	{
+		auto handle = task.await_suspend(::std::noop_coroutine());
+		handle.resume();
+	}
+	task.await_resume();
 	assert(task._coroutine.done());
 
 	return 0;

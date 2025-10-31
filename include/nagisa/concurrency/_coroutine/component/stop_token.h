@@ -16,14 +16,14 @@ inline constexpr struct set_stop_token_t
 	template<class Promise, class Token>
 	consteval static auto _check() noexcept
 	{
-		if constexpr (requires(Promise & promise, Token token) { promise.set_stop_token(::std::forward<decltype(token)>(token)); })
+		if constexpr (requires(Promise promise, Token token) { promise.set_stop_token(::std::forward<decltype(token)>(token)); })
 			return _requires_result::member;
-		else if constexpr (requires(Promise & promise, Token token) { tag_invoke(set_stop_token_t{}, promise, ::std::forward<decltype(token)>(token)); })
+		else if constexpr (requires(Promise promise, Token token) { tag_invoke(set_stop_token_t{}, promise, ::std::forward<decltype(token)>(token)); })
 			return _requires_result::tag_invoke;
 		return _requires_result::none;
 	}
 	constexpr decltype(auto) operator()(auto& promise, auto&& token) const noexcept
-		requires (_check<decltype(promise)>() != _requires_result::none)
+		requires (_check<decltype(promise), decltype(token)>() != _requires_result::none)
 	{
 		constexpr auto result = _check<decltype(promise), decltype(token)>();
 		if constexpr (result == _requires_result::member)
@@ -107,7 +107,7 @@ namespace awaitable_traits
 
 		constexpr static decltype(auto) await_suspend(handle_type self, ::std::coroutine_handle<ParentPromise> parent) noexcept
 		{
-			set_stop_token(self.promise(), ::stdexec::get_scheduler(::stdexec::get_env(parent.promise())));
+			set_stop_token(self.promise(), ::stdexec::get_stop_token(::stdexec::get_env(parent.promise())));
 		}
 	};
 	template<class Source, class Promise, class ParentPromise>

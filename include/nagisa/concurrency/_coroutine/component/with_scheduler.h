@@ -55,7 +55,9 @@ namespace awaitable_traits
 namespace promises
 {
 #if NAGISA_CONCURRENCY_USE_EXECUTION
-	template<::stdexec::scheduler Scheduler = ::stdexec::inline_scheduler>
+
+	// template<::stdexec::scheduler Scheduler = ::stdexec::inline_scheduler>
+	template<class Scheduler = ::stdexec::inline_scheduler>
 	struct with_scheduler
 	{
 		using self_type = with_scheduler;

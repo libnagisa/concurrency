@@ -5,6 +5,12 @@
 #include "./_coroutine/promise.h"
 #include "./_coroutine/awaitable_trait.h"
 #include "./_coroutine/task.h"
+#include "./_coroutine/current_handle.h"
+#include "./_coroutine/spawn.h"
+
+#include "./_coroutine/awaitable/forward.h"
+#include "./_coroutine/awaitable/from_handle.h"
+#include "./_coroutine/awaitable/sync_invoke.h"
 
 #include "./_coroutine/component/intro.h"
 #include "./_coroutine/component/exception.h"
@@ -35,6 +41,13 @@ using details::awaitable_trait_combiner_t;
 using details::awaitable_trait_instance;
 using details::awaitable_trait_instance_t;
 
+using details::forward;
+using details::from_handle;
+using details::sync_invoke;
+using details::current_handle;
+
+using details::spawn;
+
 using details::basic_task;
 using details::make_basic_task_with_trait;
 using details::make_basic_task_with_trait_t;
@@ -55,8 +68,10 @@ using details::set_stop_token_t;
 using details::set_scheduler;
 using details::set_scheduler_t;
 
-using details::simple_task;
 using details::simple_promise;
+using details::simple_awaitable_trait;
+using details::simple_awaitable;
+using details::simple_task;
 using details::intro_type;
 
 NAGISA_BUILD_LIB_END

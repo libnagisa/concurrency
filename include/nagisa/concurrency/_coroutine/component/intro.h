@@ -5,6 +5,12 @@
 
 NAGISA_BUILD_LIB_DETAIL_BEGIN
 
+enum class intro_type
+{
+	lazy,
+	eager,
+};
+
 namespace awaitable_traits
 {
 	template<class Promise, class>

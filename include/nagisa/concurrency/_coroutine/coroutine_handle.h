@@ -20,4 +20,11 @@ namespace coroutine_detail
 template<class T>
 concept coroutine_handle = requires(T t) { coroutine_detail::is_derived_from_std_coroutine_handle(t); };
 
+template<coroutine_handle To>
+constexpr decltype(auto) coroutine_handle_cast(coroutine_handle auto&& from) noexcept
+{
+	using to_type = To;
+	return to_type::from_address(::std::forward<decltype(from)>(from).address());
+}
+
 NAGISA_BUILD_LIB_DETAIL_END

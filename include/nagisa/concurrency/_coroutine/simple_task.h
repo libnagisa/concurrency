@@ -14,14 +14,23 @@
 
 NAGISA_BUILD_LIB_DETAIL_BEGIN
 
-enum class intro_type
-{
-    lazy,
-    eager,
-};
-
 template<class Value, bool Throw, class Scheduler, intro_type Intro, class StopToken, class Handle>
 struct simple_promise;
+
+template<class Promise, class Parent>
+using simple_awaitable_trait = awaitable_trait_combiner_t<Promise, Parent,
+    awaitable_traits::ready_if_done
+    , awaitable_traits::capture_scheduler
+    , awaitable_traits::capture_inplace_stop_token
+    , awaitable_traits::this_then_parent
+    , awaitable_traits::run_this
+    , awaitable_traits::release_value
+    , awaitable_traits::rethrow_exception
+    , awaitable_traits::destroy_after_resumed
+>;
+
+template<class Promise, class Parent>
+using simple_awaitable = awaitable_trait_instance_t<simple_awaitable_trait, Promise, Parent>;
 
 template<
     class Value
@@ -31,16 +40,7 @@ template<
 	, class StopToken = ::stdexec::inplace_stop_token
 	, class Handle = ::std::coroutine_handle<>
 >
-using simple_task = make_basic_task_with_trait_t< simple_promise<Value, Throw, Scheduler, Intro, StopToken, Handle>
-    , awaitable_traits::ready_if_done
-    , awaitable_traits::capture_scheduler
-    , awaitable_traits::capture_inplace_stop_token
-    , awaitable_traits::this_then_parent
-    , awaitable_traits::run_this
-    , awaitable_traits::release_value
-    , awaitable_traits::rethrow_exception
-    , awaitable_traits::destroy_after_resumed
->;
+using simple_task = basic_task<simple_promise<Value, Throw, Scheduler, Intro, StopToken, Handle>, simple_awaitable>;
 
 template<class Value, bool Throw, class Scheduler, intro_type Intro, class StopToken, class Handle>
 struct simple_promise

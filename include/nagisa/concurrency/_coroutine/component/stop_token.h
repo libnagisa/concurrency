@@ -150,32 +150,31 @@ namespace awaitable_traits
 
 namespace promises
 {
+	struct without_stop_token
+	{
+		[[nodiscard]] static ::std::coroutine_handle<> unhandled_stopped() noexcept
+		{
+			::std::terminate();
+		}
+	};
+
 #if NAGISA_CONCURRENCY_USE_EXECUTION
 	template<::stdexec::stoppable_token StopToken = ::stdexec::inplace_stop_token>
-	struct with_stop_token
+	struct with_stop_token : without_stop_token
 	{
 		using self_type = with_stop_token;
 		using stop_token_type = StopToken;
 
 		struct env_type
 		{
-
-			constexpr auto&& query(::stdexec::get_stop_token_t) const noexcept
-			{
-				return _self->_stop_token;
-			}
+			constexpr auto&& query(::stdexec::get_stop_token_t) const noexcept { return _self->_stop_token; }
 			self_type const* _self;
 		};
-
 		constexpr auto get_env() const noexcept { return env_type{ this }; }
 
 		[[nodiscard]] constexpr auto stop_requested() const noexcept
 		{
 			return _stop_token.stop_requested();
-		}
-		[[nodiscard]] static ::std::coroutine_handle<> unhandled_stopped() noexcept
-		{
-			::std::terminate();
 		}
 		constexpr auto set_stop_token(auto&& token) noexcept
 			requires ::std::assignable_from<stop_token_type&, decltype(token)>

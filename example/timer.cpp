@@ -11,29 +11,21 @@
 #include <exec/static_thread_pool.hpp>
 #include <exec/task.hpp>
 #include <nagisa/concurrency/concurrency.h>
+#include <exec/timed_thread_scheduler.hpp>
 
 
 namespace nc = ::nagisa::concurrency;
 
-::std::mutex mutex;
-::nc::simple_task<void> print_id(auto sche, int id)
+template<class TimePoint>
+struct timer_task_t
 {
-	for (auto i : ::std::views::iota(0, 3))
-	{
-		co_await ::stdexec::schedule(sche);
-		::std::unique_lock l(mutex);
-		::std::cout << "  [coro] id=" << id << " step " << i << " on thread " << std::this_thread::get_id() << '\n';
-	}
-	co_return;
-}
+	using time_point = TimePoint;
+	::std::coroutine_handle<> handle;
+	time_point due;
+	constexpr auto operator<=>(timer_task_t const& other) const noexcept { return due <=> other.due; }
+};
 
-::nc::simple_task<void> continue_on(auto awaitable, auto sche)
-{
-    co_await ::stdexec::schedule(sche);
-    co_await ::std::move(awaitable);
-}
-
-template<class Scheduler, class Clock>
+template<class Scheduler, class Clock = ::std::chrono::steady_clock>
 struct timer
 {
 	// using Scheduler = ::stdexec::inline_scheduler;
@@ -41,6 +33,8 @@ struct timer
 	using self_type = timer;
 	using scheduler_type = Scheduler;
 	using clock_type = Clock;
+	using task_type = timer_task_t<typename clock_type::time_point>;
+
 	decltype(auto) request_stop() noexcept { return _stop_source.request_stop(); }
 	auto run() noexcept
 	{
@@ -53,82 +47,100 @@ struct timer
 				continue;
 			}
 			auto& next = _tasks.top();
-			if (next.due <= clock_type::now())
+			auto deadline = next.due;
+			if (deadline > clock_type::now())
 			{
-				constexpr auto submit = [](::std::coroutine_handle<> handle, scheduler_type sche) noexcept -> ::nc::simple_task<void>
-					{
-						co_await ::stdexec::schedule(sche);
-						handle.resume();
-					};
-				auto task = submit(next.handle, _other_scheduler).release();
-				_tasks.pop();
-				lk.unlock();
-				task.resume();
-				lk.lock();
+				_cv.wait_until(lk, deadline);
 				continue;
 			}
-			_cv.wait_until(lk, next.due);
+			auto handle = next.handle;
+			_tasks.pop();
+			lk.unlock();
+			::nc::spawn(_other_scheduler, ::nc::sync_invoke([handle] { handle.resume(); }));
+			lk.lock();
 		}
 	}
+	constexpr auto now() const noexcept { return clock_type::now(); }
 	struct scheduler
 	{
 		self_type* _self;
-		clock_type::duration _interval;
-		struct awaitable
+		struct awaitable_base
 		{
 			constexpr static auto await_ready() noexcept { return false; }
-			auto await_suspend(::std::coroutine_handle<> parent) const noexcept
-			{
-				::std::unique_lock l(_self->_mutex);
-				_self->_tasks.push({ parent, clock_type::now() + _interval });
-				_self->_cv.notify_one();
-			}
 			constexpr static void await_resume() noexcept {}
 			constexpr auto&& get_env() const noexcept { return *this; }
 			template<class Tag>
 			constexpr auto query(::stdexec::get_completion_scheduler_t<Tag>) const noexcept { return _self->get_scheduler(); }
 			self_type* _self;
-			clock_type::duration _interval;
 		};
-		constexpr auto schedule() const noexcept { return awaitable{ _self, _interval }; }
+		struct at : awaitable_base
+		{
+			auto await_suspend(::std::coroutine_handle<> parent) const noexcept
+			{
+				::std::unique_lock l(awaitable_base::_self->_mutex);
+				awaitable_base::_self->_tasks.push({ parent, _due });
+				awaitable_base::_self->_cv.notify_one();
+			}
+			typename clock_type::time_point _due;
+		};
+		struct delay : awaitable_base
+		{
+			auto await_suspend(::std::coroutine_handle<> parent) const noexcept
+			{
+				::std::unique_lock l(awaitable_base::_self->_mutex);
+				awaitable_base::_self->_tasks.push({ parent, clock_type::now() + _interval });
+				awaitable_base::_self->_cv.notify_one();
+			}
+			typename clock_type::duration _interval;
+		};
+		constexpr auto schedule() const noexcept { return delay{ _self, {} }; }
+		constexpr auto schedule_at(typename clock_type::time_point tp) const noexcept { return at{ _self, tp }; }
+		constexpr auto schedule_after(typename clock_type::duration interval) const noexcept { return delay{ _self, interval }; }
 		constexpr bool operator==(const scheduler&) const = default;
 	};
-	constexpr auto get_scheduler(clock_type::duration i = {}) noexcept { return scheduler{ this, i }; }
+	constexpr auto get_scheduler() noexcept { return scheduler{ this }; }
 
-	::stdexec::inplace_stop_source _stop_source;
-	::std::mutex _mutex;
-	::std::condition_variable _cv;
-	struct t
-	{
-		::std::coroutine_handle<> handle;
-		clock_type::time_point due;
-		constexpr bool operator<(const t& other) const noexcept
-		{
-			return due > other.due;
-		}
-	};
-	::std::priority_queue<t> _tasks{};
+	timer(scheduler_type scheduler) : _other_scheduler(scheduler) {}
+
+	::stdexec::inplace_stop_source _stop_source{};
+	::std::mutex _mutex{};
+	::std::condition_variable _cv{};
+	::std::priority_queue<task_type, ::std::vector<task_type>, ::std::greater<>> _tasks{};
 	scheduler_type _other_scheduler;
 };
+template<class Scheduler>
+timer(Scheduler) -> timer<Scheduler>;
+
+::std::mutex mutex;
+::nc::simple_task<void> print_id(auto sche, ::stdexec::inplace_stop_token stop_token, int id)
+{
+	while (!stop_token.stop_requested())
+	{
+		co_await sche.schedule_after(::std::chrono::milliseconds(100));
+		::std::unique_lock l(mutex);
+		::std::cout << "  [coro] id=" << id << " on thread " << std::this_thread::get_id() << '\n';
+	}
+	co_return;
+}
 
 int main() {
 	using namespace ::std::chrono_literals;
 
-    auto num_workers = std::max(1u, std::thread::hardware_concurrency());
-    std::cout << "starting static_thread_pool with " << num_workers << " workers\n";
-
-    exec::static_thread_pool pool{ num_workers };
-	timer<decltype(pool.get_scheduler()), ::std::chrono::steady_clock> timer{ ._other_scheduler = pool.get_scheduler() };
-    auto handles
-        = ::std::views::iota(0, 7)
-        | ::std::views::transform([&](int id) { return ::print_id(timer.get_scheduler(1s), id); })
-        | ::std::ranges::to<::std::vector>();
-    for (auto&& h : handles)
-    {
-        h.handle().resume();
-    }
-	timer.run();
-    std::cout << "main: requesting stop\n";
-    pool.request_stop();
-    return 0;
+	auto num_workers = std::max(1u, std::thread::hardware_concurrency());
+	std::cout << "starting static_thread_pool with " << num_workers << " workers\n";
+	
+	exec::static_thread_pool pool{ num_workers };
+	timer timer(pool.get_scheduler());
+	static_assert(::nc::awaitable<::nc::simple_task<void>, ::nc::details::spawn_promise>);
+	for (auto id : ::std::views::iota(0, 7))
+	{
+		::nc::spawn(pool.get_scheduler(), ::print_id(timer.get_scheduler(), timer._stop_source.get_token(), id));
+	}
+	// ::nc::spawn(pool.get_scheduler(), ::nc::sync_invoke([&] { timer.run(); }));
+	::std::jthread _([&] { timer.run();  });
+	::std::this_thread::sleep_for(10s);
+	std::cout << "main: requesting stop\n";
+	timer.request_stop();
+	pool.request_stop();
+	return 0;
 }

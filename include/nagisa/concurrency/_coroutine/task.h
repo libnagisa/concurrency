@@ -54,13 +54,14 @@ public:
 	using base_type::base_type;
 
 	constexpr auto operator co_await() && noexcept
-		requires ::std::constructible_from<awaitable_type<void>, handle_type> && awaitable<awaitable_type<void>>
+		requires ::std::constructible_from<awaitable_type<void>, handle_type>
 	{
 		return awaitable_type<void>{::std::exchange(base_type::_coroutine, nullptr)};
 	}
 
 	template<class ParentPromise>
-		requires ::std::constructible_from<awaitable_type<ParentPromise>, handle_type> || ::std::constructible_from<awaitable_type<ParentPromise>, handle_type, ParentPromise&>
+		requires ::std::constructible_from<awaitable_type<ParentPromise>, handle_type>
+		|| ::std::constructible_from<awaitable_type<ParentPromise>, handle_type, ParentPromise&>
 	constexpr auto as_awaitable(ParentPromise& promise) && noexcept
 	{
 		using awaitable_type = awaitable_type<ParentPromise>;

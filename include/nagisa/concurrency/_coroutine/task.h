@@ -1,7 +1,5 @@
 #pragma once
 
-#include "./awaitable.h"
-#include "./awaitable_trait.h"
 #include "./environment.h"
 
 NAGISA_BUILD_LIB_DETAIL_BEGIN

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "./continuation.h"
 #include "./environment.h"
 
 NAGISA_BUILD_LIB_DETAIL_BEGIN
@@ -46,7 +45,7 @@ struct forward_stop_request {
 template<class Source, class Callback>
 struct connect_stop_token
 {
-	Source stop_source{};
+	Source stop_source;
 	Callback stop_callback;
 };
 
@@ -59,7 +58,8 @@ concept direct_cpatrue_stop_token = requires(Promise& promise, Parent& parent)
 
 template<class Parent, class Callback>
 concept indirect_stop_token_provider =
-	::stdexec::stoppable_token<::stdexec::stop_token_of_t<::stdexec::env_of_t<Parent>>>
+	(!::std::same_as<void, Parent>)
+	&& ::stdexec::stoppable_token<::stdexec::stop_token_of_t<::stdexec::env_of_t<Parent>>>
 	&& requires{ typename ::stdexec::stop_callback_for_t<::stdexec::stop_token_of_t<::stdexec::env_of_t<Parent>>, Callback>; }
 ;
 
@@ -75,15 +75,15 @@ namespace awaitable_traits
 	{
 		using promise_type = Promise;
 		using handle_type = ::std::coroutine_handle<promise_type>;
-		using context_type = connect_stop_token<Source, ::std::any>;
+		// using context_type = connect_stop_token<Source, ::std::any>;
 
-		constexpr static auto create_context(handle_type self) noexcept
-		{
-			return context_type{};
-		}
+		// constexpr static auto create_context(handle_type self) noexcept
+		// {
+		// 	return context_type{};
+		// }
 
 		template<class ParentPromise>
-		constexpr static decltype(auto) await_suspend(context_type& context, handle_type self, ::std::coroutine_handle<ParentPromise> parent) noexcept
+		constexpr static decltype(auto) await_suspend(/*context_type& context, */handle_type self, ::std::coroutine_handle<ParentPromise> parent) noexcept
 		{
 			if constexpr (direct_cpatrue_stop_token<Promise, ParentPromise>)
 			{
@@ -159,7 +159,7 @@ namespace promises
 	};
 
 #if NAGISA_CONCURRENCY_USE_EXECUTION
-	template<::stdexec::stoppable_token StopToken = ::stdexec::inplace_stop_token>
+	template<class StopToken = ::stdexec::inplace_stop_token>
 	struct with_stop_token : without_stop_token
 	{
 		using self_type = with_stop_token;

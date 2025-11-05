@@ -6,13 +6,12 @@ NAGISA_BUILD_LIB_DETAIL_BEGIN
 
 template<class Result>
 	requires ::std::move_constructible<Result>&& ::std::destructible<Result>
-struct from_handle
+struct from_handle : ::std::suspend_always
 {
 	using result_type = Result;
 
 	constexpr explicit(false) from_handle() noexcept = default;
 
-	constexpr static auto await_ready() noexcept { return false; }
 	constexpr auto await_suspend(auto&& parent)
 		noexcept(::std::is_nothrow_constructible_v<result_type, decltype(parent)>)
 		requires ::std::constructible_from<result_type, decltype(parent)>

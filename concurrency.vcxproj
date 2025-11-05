@@ -25,6 +25,7 @@
     <ClInclude Include="include\nagisa\concurrency\concurrency.h" />
     <ClInclude Include="include\nagisa\concurrency\_coroutine\any_scheduler.h" />
     <ClInclude Include="include\nagisa\concurrency\_coroutine\awaitable.h" />
+    <ClInclude Include="include\nagisa\concurrency\_coroutine\awaitable\env.h" />
     <ClInclude Include="include\nagisa\concurrency\_coroutine\awaitable\environment.h" />
     <ClInclude Include="include\nagisa\concurrency\_coroutine\awaitable\forward.h" />
     <ClInclude Include="include\nagisa\concurrency\_coroutine\awaitable\from_handle.h" />
@@ -47,7 +48,7 @@
     <ClInclude Include="include\nagisa\concurrency\await_std.h" />
     <ClInclude Include="include\nagisa\concurrency\_coroutine\component\workflow.h" />
     <ClInclude Include="include\nagisa\concurrency\_coroutine\coroutine_handle.h" />
-    <ClInclude Include="include\nagisa\concurrency\_coroutine\current_handle.h" />
+    <ClInclude Include="include\nagisa\concurrency\_coroutine\awaitable\current_handle.h" />
     <ClInclude Include="include\nagisa\concurrency\_coroutine\environment.h" />
     <ClInclude Include="include\nagisa\concurrency\_coroutine\promise.h" />
     <ClInclude Include="include\nagisa\concurrency\_coroutine\scope_guard.h" />
@@ -55,9 +56,6 @@
     <ClInclude Include="include\nagisa\concurrency\_coroutine\task.h" />
     <ClInclude Include="include\nagisa\concurrency\_coroutine\simple_task.h" />
     <ClInclude Include="include\nagisa\concurrency\await_std\environment.h" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="example\timer.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>

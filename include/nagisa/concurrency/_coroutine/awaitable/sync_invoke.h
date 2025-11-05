@@ -6,7 +6,7 @@ NAGISA_BUILD_LIB_DETAIL_BEGIN
 
 template<class Fn, class... Args>
 	requires ::std::invocable<Fn, Args...>
-struct sync_invoke
+struct sync_invoke : ::std::suspend_never
 {
 	constexpr explicit(false) sync_invoke(auto&& function, auto&&... args)
 		noexcept(::std::is_nothrow_constructible_v<Fn, decltype(function)> && ::std::is_nothrow_constructible_v<::std::tuple<Args...>, decltype(args)...>)
@@ -14,9 +14,6 @@ struct sync_invoke
 		: _function(::std::forward<decltype(function)>(function))
 		, _args(::std::forward<decltype(args)>(args)...)
 	{}
-
-	constexpr static auto await_ready() noexcept { return true; }
-	constexpr static auto await_suspend(auto&&) noexcept {}
 	constexpr decltype(auto) await_resume()
 		noexcept(::std::is_nothrow_invocable_v<Fn, Args...>)
 	{

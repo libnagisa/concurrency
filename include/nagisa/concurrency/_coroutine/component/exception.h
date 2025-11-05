@@ -69,7 +69,7 @@ namespace promises
 	{
 		constexpr exception() = default;
 
-		static [[nodiscard]] auto unhandled_exception() noexcept { ::std::abort(); }
+		[[noreturn]] static auto unhandled_exception() noexcept { ::std::abort(); }
 	};
 }
 

@@ -164,14 +164,31 @@ namespace promises
 	{
 		using self_type = with_stop_token;
 		using stop_token_type = StopToken;
-
 		struct env_type
 		{
 			constexpr auto&& query(::stdexec::get_stop_token_t) const noexcept { return _self->_stop_token; }
 			self_type const* _self;
 		};
-		constexpr auto get_env() const noexcept { return env_type{ this }; }
 
+
+		constexpr explicit(false) with_stop_token()
+			noexcept(::std::is_nothrow_default_constructible_v<stop_token_type>)
+			requires ::std::default_initializable<stop_token_type>
+			= default;
+
+		constexpr explicit(false) with_stop_token(auto&&...)
+			noexcept(::std::is_nothrow_default_constructible_v<stop_token_type>)
+			requires ::std::default_initializable<stop_token_type>
+			: with_stop_token()
+		{}
+
+		constexpr explicit(false) with_stop_token(auto const& env, auto&&...)
+			noexcept(::std::is_nothrow_constructible_v<stop_token_type, decltype(::stdexec::get_stop_token(env))>)
+			requires ::std::constructible_from<stop_token_type, decltype(::stdexec::get_stop_token(env))>
+			: _stop_token(::stdexec::get_stop_token(env))
+		{}
+
+		constexpr auto get_env() const noexcept { return env_type{ this }; }
 		[[nodiscard]] constexpr auto stop_requested() const noexcept
 		{
 			return _stop_token.stop_requested();
@@ -181,7 +198,7 @@ namespace promises
 		{
 			_stop_token = ::std::forward<decltype(token)>(token);
 		}
-		stop_token_type _stop_token{};
+		stop_token_type _stop_token;
 	};
 
 #endif

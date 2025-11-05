@@ -1,7 +1,7 @@
 #pragma once
 
-#include "./awaitable/forward.h"
-#include "./awaitable/from_handle.h"
+#include "./forward.h"
+#include "./from_handle.h"
 #include "./environment.h"
 
 NAGISA_BUILD_LIB_DETAIL_BEGIN

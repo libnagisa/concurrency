@@ -5,12 +5,13 @@
 #include "./_coroutine/promise.h"
 #include "./_coroutine/awaitable_trait.h"
 #include "./_coroutine/task.h"
-#include "./_coroutine/current_handle.h"
 #include "./_coroutine/spawn.h"
 
 #include "./_coroutine/awaitable/forward.h"
 #include "./_coroutine/awaitable/from_handle.h"
 #include "./_coroutine/awaitable/sync_invoke.h"
+#include "./_coroutine/awaitable/current_handle.h"
+#include "./_coroutine/awaitable/env.h"
 
 #include "./_coroutine/component/intro.h"
 #include "./_coroutine/component/exception.h"
@@ -40,17 +41,19 @@ using details::awaitable_trait_combiner;
 using details::awaitable_trait_combiner_t;
 using details::awaitable_trait_instance;
 using details::awaitable_trait_instance_t;
+using details::build_awaitable_t;
+using details::build_awaitable;
 
 using details::forward;
 using details::from_handle;
 using details::sync_invoke;
 using details::current_handle;
+using details::environment;
 
 using details::spawn;
 
+using details::basic_fork;
 using details::basic_task;
-using details::make_basic_task_with_trait;
-using details::make_basic_task_with_trait_t;
 
 namespace promises = details::promises;
 namespace awaitable_traits = details::awaitable_traits;
@@ -69,7 +72,6 @@ using details::set_scheduler;
 using details::set_scheduler_t;
 
 using details::simple_promise;
-using details::simple_awaitable_trait;
 using details::simple_awaitable;
 using details::simple_task;
 using details::intro_type;

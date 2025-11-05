@@ -6,7 +6,7 @@ NAGISA_BUILD_LIB_DETAIL_BEGIN
 
 template<class Result>
 	requires ::std::move_constructible<Result> && ::std::destructible<Result>
-struct forward
+struct forward : ::std::suspend_never
 {
 	using result_type = Result;
 
@@ -16,8 +16,6 @@ struct forward
 		: _result(::std::forward<decltype(args)>(args)...)
 	{}
 
-	constexpr static auto await_ready() noexcept { return true; }
-	constexpr static auto await_suspend(auto&&) noexcept {}
 	constexpr auto await_resume() noexcept { return ::std::move(_result); }
 
 	result_type _result;

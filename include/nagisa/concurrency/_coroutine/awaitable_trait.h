@@ -138,16 +138,21 @@ namespace at_details
 	template<class F1, class F2, class C1, class C2, class... Args>
 	consteval auto compatible_impl() noexcept
 	{
-		constexpr auto i1 = invocable<F1, C1, Args...>;
-		constexpr auto i2 = invocable<F2, C2, Args...>;
-		if constexpr (!i1 && !i2)
-			return false;
-		else if constexpr (!i1 || !i2)
-			return true;
+		if constexpr (invocable<F2, C2, Args...>)
+		{
+			if constexpr (invocable<F1, C1, Args...>)
+			{
+				return ::std::same_as<void, invoke_result_t<F1, C1, Args...>>
+					|| ::std::same_as<void, invoke_result_t<F2, C2, Args...>>;
+			}
+			else
+			{
+				return true;
+			}
+		}
 		else
 		{
-			return ::std::same_as<void, invoke_result_t<F1, C1, Args...>>
-				|| ::std::same_as<void, invoke_result_t<F2, C2, Args...>>;
+			return invocable<F1, C1, Args...>;
 		}
 	}
 
@@ -400,7 +405,7 @@ template<class Trait, class Promise, class Parent>
 	requires requires{ typename awaitable_trait_context<Trait, Promise, Parent>::type; }
 using awaitable_trait_context_t = typename awaitable_trait_context<Trait, Promise, Parent>::type;
 
-template<template<class, class>class Trait, class Promise, class Parent>
+template<class Promise, class Parent, template<class, class>class Trait>
 struct awaitable_trait_instance_t
 {
 private:
@@ -430,9 +435,9 @@ public:
 };
 
 
-template<template<class, class>class Trait, class Promise, class Parent>
+template<class Promise, class Parent, template<class, class>class Trait>
 	requires requires{ typename awaitable_trait_context_t<Trait<Promise, Parent>, Promise, Parent>; }
-struct awaitable_trait_instance_t<Trait, Promise, Parent>
+struct awaitable_trait_instance_t<Promise, Parent, Trait>
 {
 private:
 	using self_type = awaitable_trait_instance_t;
@@ -498,7 +503,21 @@ template<template<class, class>class Trait>
 struct awaitable_trait_instance
 {
 	template<class Promise, class Parent>
-	using type = awaitable_trait_instance_t<Trait, Promise, Parent>;
+	using type = awaitable_trait_instance_t<Promise, Parent, Trait>;
+};
+
+template<class Promise, class Parent, template<class, class>class... Traits>
+using build_awaitable_t = awaitable_trait_instance_t<
+	Promise
+	, Parent
+	, awaitable_trait_combiner<Traits...>::template type
+>;
+
+template<template<class, class>class... Traits>
+struct build_awaitable
+{
+	template<class Promise, class Parent>
+	using type = build_awaitable_t<Promise, Parent, Traits...>;
 };
 
 NAGISA_BUILD_LIB_DETAIL_END

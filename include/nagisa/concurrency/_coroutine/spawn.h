@@ -9,7 +9,7 @@
 #include "./component/exit.h"
 #include "./component/with_awaitable.h"
 #include "./component/stop_token.h"
-#include "./current_handle.h"
+#include "./awaitable/current_handle.h"
 #include "./environment.h"
 
 NAGISA_BUILD_LIB_DETAIL_BEGIN

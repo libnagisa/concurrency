@@ -1,35 +1,24 @@
 #include <nagisa/concurrency/concurrency.h>
-#include <ranges>
-#include <algorithm>
-#include <cassert>
-#include <any>
 #include <stdexec/execution.hpp>
-#include <stdexec/coroutine.hpp>
-#include <exec/static_thread_pool.hpp>
+#include <iostream>
 
 namespace nc = ::nagisa::concurrency;
-namespace nat = ::nc::awaitable_traits;
 
 struct promise;
 
 template<class Promise, class Parent>
-using task_awaitable_trait = ::nc::awaitable_trait_combiner_t<Promise, Parent,
-	::nat::ready_if_done
-
-	, ::nat::capture_scheduler
-	, ::nat::capture_inplace_stop_token
-	, ::nat::this_then_parent
-	, ::nat::run_this
-
-	, ::nat::release_value
-	, ::nat::rethrow_exception
-	, ::nat::destroy_after_resumed
+using awaitable = ::nc::build_awaitable_t<Promise, Parent
+	, ::nc::awaitable_traits::ready_if_done
+	, ::nc::awaitable_traits::capture_scheduler
+	, ::nc::awaitable_traits::capture_inplace_stop_token
+	, ::nc::awaitable_traits::this_then_parent
+	, ::nc::awaitable_traits::run_this
+	, ::nc::awaitable_traits::release_value
+	, ::nc::awaitable_traits::rethrow_exception
+	, ::nc::awaitable_traits::destroy_after_resumed
 >;
 
-template<class Promise, class Parent>
-using trait_instance = ::nc::awaitable_trait_instance_t<task_awaitable_trait, Promise, Parent>;
-
-using task = ::nc::basic_task<promise, trait_instance>;
+using task = ::nc::basic_task<promise, awaitable>;
 
 struct promise
 	: ::nc::promises::lazy
@@ -46,22 +35,13 @@ struct promise
 		return ::stdexec::env(::nc::promises::with_scheduler<>::get_env(), ::nc::promises::with_stop_token<>::get_env());
 	}
 };
-static_assert(::nc::awaitable<trait_instance<promise, void>>);
+static_assert(::nc::awaitable<awaitable<promise, void>>);
 static_assert(::nc::awaitable<task>);
 
-struct get_current_handle_t
+struct check_stop_t : ::std::suspend_always
 {
-	auto await_ready() const noexcept { return false; }
-	::std::coroutine_handle<> result;
-	auto await_suspend(::std::coroutine_handle<> parent) noexcept { result = parent;  return parent; }
-	auto await_resume() const noexcept { return result; }
-};
-
-struct check_stop_t
-{
-	auto await_ready() const noexcept { return false; }
 	template<class Promise>
-	::std::coroutine_handle<> await_suspend(::std::coroutine_handle<Promise> parent) noexcept
+	static ::std::coroutine_handle<> await_suspend(::std::coroutine_handle<Promise> parent) noexcept
 	{
 		if constexpr (requires { ::stdexec::get_stop_token(::stdexec::get_env(parent.promise())); })
 		{
@@ -71,31 +51,38 @@ struct check_stop_t
 		}
 		return parent;
 	}
-	auto await_resume() const noexcept { }
 };
-
+constexpr auto check_stop() noexcept { return check_stop_t{}; }
 task f1(int i) noexcept
 {
-	// ::std::println("{}", i);
-	co_await check_stop_t{};
-	auto&& sche = co_await ::stdexec::get_scheduler();
-	co_await sche.schedule();
+	::std::cout << i << ::std::endl;
+	co_await ::check_stop();
+	co_await ::stdexec::schedule(co_await ::stdexec::get_scheduler());
 	if (!i)
 		co_return;
 	co_await f1(i - 1);
-	co_return;
 }
 
 int main()
 {
-	auto task = f1(5).operator co_await();
-	if (!task.await_ready())
 	{
-		auto handle = task.await_suspend(::std::noop_coroutine());
-		handle.resume();
+		auto t = f1(5);
+		// lazy start
+		t.handle().resume();
+		// coroutine will be destroyed when task destruct
+		// t.~task();
 	}
-	task.await_resume();
-	assert(task._coroutine.done());
-
+	{
+		auto t = f1(5);
+		// lazy start
+		t.handle().resume();
+		// release the ownership
+		auto h = t.release();
+		// must destroy the coroutine
+		h.destroy();
+	}
+	{
+		::nc::spawn(::stdexec::inline_scheduler{}, f1(5));
+	}
 	return 0;
 }

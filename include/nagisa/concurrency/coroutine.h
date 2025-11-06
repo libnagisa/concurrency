@@ -5,7 +5,6 @@
 #include "./_coroutine/promise.h"
 #include "./_coroutine/awaitable_trait.h"
 #include "./_coroutine/task.h"
-#include "./_coroutine/spawn.h"
 
 #include "./_coroutine/awaitable/forward.h"
 #include "./_coroutine/awaitable/from_handle.h"
@@ -24,8 +23,6 @@
 #include "./_coroutine/component/stop_token.h"
 #include "./_coroutine/component/workflow.h"
 #include "./_coroutine/component/with_awaitable.h"
-
-#include "./_coroutine/simple_task.h"
 
 #include "./environment.h"
 
@@ -50,8 +47,6 @@ using details::sync_invoke;
 using details::current_handle;
 using details::environment;
 
-using details::spawn;
-
 using details::basic_fork;
 using details::basic_task;
 
@@ -71,9 +66,6 @@ using details::set_stop_token_t;
 using details::set_scheduler;
 using details::set_scheduler_t;
 
-using details::simple_promise;
-using details::simple_awaitable;
-using details::simple_task;
 using details::intro_type;
 
 NAGISA_BUILD_LIB_END

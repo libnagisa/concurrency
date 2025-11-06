@@ -49,6 +49,7 @@ struct connect_stop_token
 	Callback stop_callback;
 };
 
+#if NAGISA_CONCURRENCY_USE_EXECUTION
 
 template<class Promise, class Parent>
 concept direct_cpatrue_stop_token = requires(Promise& promise, Parent& parent)
@@ -65,7 +66,6 @@ concept indirect_stop_token_provider =
 
 namespace awaitable_traits
 {
-#if NAGISA_CONCURRENCY_USE_EXECUTION
 
 	template<class Source, class Promise, class ParentPromise>
 	struct capture_stop_token_t {};
@@ -145,8 +145,8 @@ namespace awaitable_traits
 
 	template<class Promise, class Parent>
 	using capture_inplace_stop_token = capture_stop_token_t<::stdexec::inplace_stop_source, Promise, Parent>;
-#endif
 }
+#endif
 
 namespace promises
 {

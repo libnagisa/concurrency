@@ -5,6 +5,7 @@
 #include <memory>
 #include <functional>
 #include <coroutine>
+#include <ranges>
 
 #include <stdexec/execution.hpp>
 #include <exec/static_thread_pool.hpp>

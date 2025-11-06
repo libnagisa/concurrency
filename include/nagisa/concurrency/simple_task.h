@@ -1,16 +1,9 @@
 #pragma once
 
-#include "./awaitable_trait.h"
-#include "./component/intro.h"
-#include "./component/with_scheduler.h"
-#include "./component/stop_token.h"
-#include "./component/workflow.h"
-#include "./component/exit.h"
-#include "./component/exception.h"
-#include "./component/value.h"
-#include "./component/with_awaitable.h"
-#include "./task.h"
-#include "./environment.h"
+#include <nagisa/concurrency/coroutine.h>
+#include <nagisa/concurrency/environment.h>
+
+#if NAGISA_CONCURRENCY_USE_EXECUTION
 
 NAGISA_BUILD_LIB_DETAIL_BEGIN
 
@@ -50,7 +43,7 @@ struct simple_promise
 		, simple_task<Value, Throw, Scheduler, Intro, StopToken, Handle>>
 	, promises::with_scheduler<Scheduler>
 	, promises::with_stop_token<StopToken>
-	, promises::use_as_awaitable<simple_promise<Value, Throw, Scheduler, Intro, StopToken, Handle>>
+	, promises::with_await_transform<simple_promise<Value, Throw, Scheduler, Intro, StopToken, Handle>>
 {
 private:
 	using base_sche_type = promises::with_scheduler<Scheduler>;
@@ -75,3 +68,15 @@ public:
 };
 
 NAGISA_BUILD_LIB_DETAIL_END
+
+NAGISA_BUILD_LIB_BEGIN
+
+using details::simple_task;
+using details::simple_awaitable;
+using details::simple_promise;
+
+NAGISA_BUILD_LIB_END
+
+#endif
+
+#include <nagisa/build_lib/destruct.h>

@@ -28,7 +28,7 @@ struct promise
 	, ::nc::promises::return_object_from_handle<promise, task>
 	, ::nc::promises::with_scheduler<>
 	, ::nc::promises::with_stop_token<>
-	, ::nc::promises::use_as_awaitable<promise>
+	, ::nc::promises::with_await_transform<promise>
 {
 	constexpr auto get_env() const noexcept
 	{

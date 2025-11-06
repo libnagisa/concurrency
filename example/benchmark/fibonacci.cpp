@@ -68,7 +68,7 @@ struct promise
 	, ::nc::promises::jump_to_continuation<>
 	, ::nc::promises::return_object_from_handle<promise, task>
 	, ::nc::promises::without_stop_token
-	, ::nc::promises::use_as_awaitable<promise>
+	, ::nc::promises::with_await_transform<promise>
 {};
 
 task fib_coro(auto sche, long n, long cutoff) noexcept

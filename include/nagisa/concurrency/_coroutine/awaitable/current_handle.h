@@ -11,6 +11,8 @@ struct current_handle_impl : from_handle<Handle>
 {
 	using base_type = from_handle<Handle>;
 
+	using base_type::base_type;
+
 	constexpr auto as_awaitable(auto&& parent) const noexcept
 	{
 		using promise_type = ::std::remove_cvref_t<decltype(parent)>;

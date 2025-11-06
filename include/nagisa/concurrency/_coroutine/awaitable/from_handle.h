@@ -9,8 +9,14 @@ template<class Result>
 struct from_handle : ::std::suspend_always
 {
 	using result_type = Result;
-
+#if (defined(__clang__) && (__clang_major__ >= 17)) \
+	|| (defined(__GNUC__) && (__GNUC__ >= 13))		\
+	|| (defined(_MSC_VER ) && (_MSC_VER >= 1929))	\
+	//
 	constexpr explicit(false) from_handle() noexcept = default;
+#else
+	constexpr explicit(false) from_handle() noexcept {}
+#endif
 
 	constexpr auto await_suspend(auto&& parent)
 		noexcept(::std::is_nothrow_constructible_v<result_type, decltype(parent)>)
@@ -28,7 +34,7 @@ struct from_handle : ::std::suspend_always
 
 	union
 	{
-		::std::byte _empty[1]{};
+		::std::byte _empty{};
 		result_type _result;
 	};
 };

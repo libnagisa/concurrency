@@ -5,6 +5,7 @@
 #include "./_coroutine/promise.h"
 #include "./_coroutine/awaitable_trait.h"
 #include "./_coroutine/task.h"
+#include "./_coroutine/noop_promise.h"
 
 #include "./_coroutine/awaitable/forward.h"
 #include "./_coroutine/awaitable/from_handle.h"
@@ -49,6 +50,7 @@ using details::environment;
 
 using details::basic_fork;
 using details::basic_task;
+using details::noop_awaitable;
 
 namespace promises = details::promises;
 namespace awaitable_traits = details::awaitable_traits;
@@ -67,6 +69,8 @@ using details::set_scheduler;
 using details::set_scheduler_t;
 
 using details::intro_type;
+
+using details::noop_promise;
 
 NAGISA_BUILD_LIB_END
 

@@ -10,6 +10,7 @@
 #include <exception>
 #include <type_traits>
 #include <functional>
+#include <array>
 #include <tuple>
 
 #if !defined(NAGISA_CONCURRENCY_USE_EXECUTION)

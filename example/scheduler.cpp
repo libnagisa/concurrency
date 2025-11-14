@@ -2,8 +2,7 @@
 #include <coroutine>
 
 #include <nagisa/concurrency/concurrency.h>
-#include <exec/any_sender_of.hpp>
-#include <exec/task.hpp>
+
 namespace nc = ::nagisa::concurrency;
 
 struct scheduler
@@ -32,7 +31,8 @@ struct scheduler
 	::std::size_t const* _id = nullptr;
 };
 static_assert(::stdexec::scheduler<scheduler>);
-using optional_task = ::nc::simple_task<void, false, ::std::optional<scheduler>>;
+static_assert(::stdexec::scheduler<::nc::any_scheduler>);
+using optional_task = ::nc::simple_task<void, false, ::std::optional<::nc::any_scheduler>>;
 
 optional_task f1() noexcept
 {

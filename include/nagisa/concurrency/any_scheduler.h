@@ -1,6 +1,7 @@
-#pragma once
+﻿#pragma once
 
 #include <memory>
+#include <version>
 
 #include <nagisa/concurrency/coroutine.h>
 #include <nagisa/concurrency/environment.h>
@@ -10,7 +11,12 @@
 
 NAGISA_BUILD_LIB_DETAIL_BEGIN
 
-struct any_scheduler;
+#pragma push_macro("NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR")
+#if __cpp_lib_constexpr_memory >= 202202L
+#	define NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR constexpr
+#else
+#	define NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR
+#endif
 
 namespace any
 {
@@ -63,18 +69,20 @@ namespace any
 	};
 	struct awaitable_wrapper
 	{
-		constexpr awaitable_wrapper(awaitable_wrapper const&) noexcept = delete;
-		constexpr awaitable_wrapper& operator=(awaitable_wrapper const&) noexcept = delete;
-		constexpr awaitable_wrapper(awaitable_wrapper&&) noexcept = default;
-		constexpr awaitable_wrapper& operator=(awaitable_wrapper&&) noexcept = default;
-		constexpr explicit(false) awaitable_wrapper(auto&&... args) noexcept(::std::is_nothrow_constructible_v<::std::unique_ptr<basic_awaitable>, decltype(args)...>)
+		NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR awaitable_wrapper(awaitable_wrapper const&) noexcept = delete;
+		NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR awaitable_wrapper& operator=(awaitable_wrapper const&) noexcept = delete;
+		NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR awaitable_wrapper(awaitable_wrapper&&) noexcept = default;
+		NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR awaitable_wrapper& operator=(awaitable_wrapper&&) noexcept = default;
+		NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR explicit(false) awaitable_wrapper(auto&&... args)
+			// noexcept(::std::is_nothrow_constructible_v<::std::unique_ptr<basic_awaitable>, decltype(args)...>)
 			requires ::std::constructible_from<::std::unique_ptr<basic_awaitable>, decltype(args)...>
 		: _awaitable(::std::forward<decltype(args)>(args)...)
-		{}
+		{
+		}
 
-		[[nodiscard]] constexpr decltype(auto) await_ready() const { return _awaitable->await_ready(); }
-		[[nodiscard]] constexpr decltype(auto) await_suspend(::std::coroutine_handle<> parent) const { return _awaitable->await_suspend(parent); }
-		constexpr decltype(auto) await_resume() const { return _awaitable->await_resume(); }
+		[[nodiscard]] NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR decltype(auto) await_ready() const { return _awaitable->await_ready(); }
+		[[nodiscard]] NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR decltype(auto) await_suspend(::std::coroutine_handle<> parent) const { return _awaitable->await_suspend(parent); }
+		NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR decltype(auto) await_resume() const { return _awaitable->await_resume(); }
 
 		::std::unique_ptr<basic_awaitable> _awaitable;
 	};
@@ -123,19 +131,11 @@ namespace any
 
 		scheduler_type _scheduler;
 	};
+
 	struct scheduler_wrapper
 	{
-		struct schedule_type : awaitable_wrapper
-		{
-			[[nodiscard]] constexpr auto&& get_env() const noexcept { return *this; }
-			template<class Tag>
-			constexpr any_scheduler query(::stdexec::get_completion_scheduler_t<Tag>) const;
-			scheduler_wrapper* _self;
-		};
-		constexpr scheduler_wrapper(scheduler_wrapper const& other)
-			: _scheduler(other._scheduler->_clone())
-		{}
-		constexpr scheduler_wrapper& operator=(scheduler_wrapper const& other)
+		NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR scheduler_wrapper(scheduler_wrapper const& other) : _scheduler(other._scheduler->_clone()) {}
+		NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR scheduler_wrapper& operator=(scheduler_wrapper const& other)
 		{
 			if (this == ::std::addressof(other))
 				return *this;
@@ -143,20 +143,19 @@ namespace any
 			_scheduler = other._scheduler->_clone();
 			return *this;
 		}
-		constexpr scheduler_wrapper(scheduler_wrapper&&) noexcept = default;
-		constexpr scheduler_wrapper& operator=(scheduler_wrapper&&) noexcept = default;
-		constexpr explicit(false) scheduler_wrapper(auto&&... args) noexcept(::std::is_nothrow_constructible_v<::std::unique_ptr<basic_scheduler>, decltype(args)...>)
+		NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR scheduler_wrapper(scheduler_wrapper&&) noexcept = default;
+		NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR scheduler_wrapper& operator=(scheduler_wrapper&&) noexcept = default;
+		NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR explicit(false) scheduler_wrapper(auto&&... args)
+			// noexcept(::std::is_nothrow_constructible_v<::std::unique_ptr<basic_scheduler>, decltype(args)...>)
 			requires ::std::constructible_from<::std::unique_ptr<basic_scheduler>, decltype(args)...>
 		: _scheduler(::std::forward<decltype(args)>(args)...)
-		{
-		}
-
-		[[nodiscard]] constexpr decltype(auto) schedule() { return schedule_type{ _scheduler->schedule(), this }; }
-		constexpr decltype(auto) operator==(scheduler_wrapper const& other) const { return _scheduler->operator==(*other._scheduler); }
+		{}
+		[[nodiscard]] NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR decltype(auto) schedule() const { return _scheduler->schedule(); }
+		NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR decltype(auto) operator==(scheduler_wrapper const& other) const { return _scheduler->operator==(*other._scheduler); }
 
 		::std::unique_ptr<basic_scheduler> _scheduler;
 	};
-	constexpr decltype(auto) erase_scheduler(::stdexec::scheduler auto&& s)
+	constexpr ::std::convertible_to<scheduler_wrapper const&> decltype(auto) erase_scheduler(::stdexec::scheduler auto&& s)
 	{
 		if constexpr (::std::convertible_to<decltype(s), scheduler_wrapper const&>)
 			return ::std::forward<decltype(s)>(s);
@@ -173,42 +172,45 @@ namespace any
 	}
 }
 
-struct query_create_tag{};
-any_scheduler query_create(any::scheduler_wrapper const& wrapper);
+template<class Scheduler>
+struct scheduler_env
+{
+	template<class Tag> constexpr auto query(::stdexec::get_completion_scheduler_t<Tag>) const { return *_scheduler; }
+	Scheduler* _scheduler;
+};
 
 struct any_scheduler final
 {
 	using self_type = any_scheduler;
-	constexpr any_scheduler(self_type const&) = default;
-	constexpr self_type& operator=(self_type const&) = default;
-	constexpr any_scheduler(self_type&&) noexcept = default;
-	constexpr self_type& operator=(self_type&&) noexcept = default;
-	constexpr explicit(false) any_scheduler(auto&& scheduler)
+	struct schedule_type : any::awaitable_wrapper
+	{
+		using base_type = any::awaitable_wrapper;
+		NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR explicit(false) schedule_type(any_scheduler* self, auto&&... args)
+			// noexcept(::std::is_nothrow_constructible_v<base_type, decltype(args)...>)
+			requires ::std::constructible_from<base_type, decltype(args)...>
+			: base_type(::std::forward<decltype(args)>(args)...)
+			, _self(self)
+		{}
+		constexpr auto get_env() const noexcept { return scheduler_env{ _self }; }
+		any_scheduler* _self;
+	};
+
+	NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR any_scheduler(self_type const&) = default;
+	NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR self_type& operator=(self_type const&) = default;
+	NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR any_scheduler(self_type&&) noexcept = default;
+	NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR self_type& operator=(self_type&&) noexcept = default;
+	NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR explicit(false) any_scheduler(auto&& scheduler)
 		requires (!::std::same_as<::std::remove_cvref_t<decltype(scheduler)>, self_type>)
 			&& ::stdexec::scheduler<decltype(scheduler)>
 		: _wrapper(any::erase_scheduler(::std::forward<decltype(scheduler)>(scheduler)))
 	{}
-	[[nodiscard]] constexpr decltype(auto) schedule() { return _wrapper.schedule(); }
-	constexpr bool operator==(self_type const&) const = default;
+	NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR auto schedule() { return schedule_type(this, any::erase_awaitable(_wrapper.schedule())); }
+	NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR bool operator==(self_type const&) const = default;
 
 	any::scheduler_wrapper _wrapper;
-private:
-	constexpr any_scheduler(query_create_tag, any::scheduler_wrapper const& wrapper)
-		: _wrapper(wrapper)
-	{}
-
-	friend any_scheduler query_create(any::scheduler_wrapper const& wrapper)
-	{
-		return any_scheduler{ query_create_tag{}, wrapper };
-	}
 };
 
-template <class Tag>
-constexpr any_scheduler any::scheduler_wrapper::schedule_type::query(stdexec::get_completion_scheduler_t<Tag>) const
-{
-	return details::query_create(*_self);
-}
-
+#pragma pop_macro("NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR")
 
 NAGISA_BUILD_LIB_DETAIL_END
 

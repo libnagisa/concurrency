@@ -177,7 +177,7 @@ namespace at_details
 			{
 				if constexpr (::std::same_as<void, invoke_result_t<F2, decltype(context2), decltype(args)...>>)
 				{
-					auto guard_f2 = scope_guard{ [&] noexcept { at_details::invoke(F2{}, ::std::forward<decltype(context2)>(context2), ::std::forward<decltype(args)>(args)...); } };
+					auto guard_f2 = scope_guard{ [&]() noexcept { at_details::invoke(F2{}, ::std::forward<decltype(context2)>(context2), ::std::forward<decltype(args)>(args)...); } };
 					return at_details::invoke(F1{}, ::std::forward<decltype(context1)>(context1), ::std::forward<decltype(args)>(args)...);
 				}
 				else

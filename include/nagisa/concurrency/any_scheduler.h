@@ -107,7 +107,6 @@ namespace any
 		constexpr virtual ~basic_scheduler() noexcept = default;
 		constexpr virtual awaitable_wrapper schedule() = 0;
 		constexpr virtual bool operator==(basic_scheduler const&) const = 0;
-		constexpr virtual ::std::unique_ptr<basic_scheduler> _clone() const = 0;
 	};
 	template<::stdexec::scheduler T>
 	struct scheduler_eraser : basic_scheduler
@@ -127,22 +126,14 @@ namespace any
 				return false;
 			return _scheduler == ptr->_scheduler;
 		}
-		[[nodiscard]] constexpr ::std::unique_ptr<basic_scheduler> _clone() const override { return ::std::make_unique<scheduler_eraser>(_scheduler); }
 
 		scheduler_type _scheduler;
 	};
 
 	struct scheduler_wrapper
 	{
-		NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR scheduler_wrapper(scheduler_wrapper const& other) : _scheduler(other._scheduler->_clone()) {}
-		NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR scheduler_wrapper& operator=(scheduler_wrapper const& other)
-		{
-			if (this == ::std::addressof(other))
-				return *this;
-			auto self = ::std::move(*this);
-			_scheduler = other._scheduler->_clone();
-			return *this;
-		}
+		NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR scheduler_wrapper(scheduler_wrapper const& other) = default;
+		NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR scheduler_wrapper& operator=(scheduler_wrapper const& other) = default;
 		NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR scheduler_wrapper(scheduler_wrapper&&) noexcept = default;
 		NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR scheduler_wrapper& operator=(scheduler_wrapper&&) noexcept = default;
 		NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR explicit(false) scheduler_wrapper(auto&&... args)
@@ -153,7 +144,8 @@ namespace any
 		[[nodiscard]] NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR decltype(auto) schedule() const { return _scheduler->schedule(); }
 		NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR decltype(auto) operator==(scheduler_wrapper const& other) const { return _scheduler->operator==(*other._scheduler); }
 
-		::std::unique_ptr<basic_scheduler> _scheduler;
+		// ::std::unique_ptr<basic_scheduler> _scheduler;
+		::std::shared_ptr<basic_scheduler> _scheduler;
 	};
 	constexpr ::std::convertible_to<scheduler_wrapper const&> decltype(auto) erase_scheduler(::stdexec::scheduler auto&& s)
 	{
@@ -172,27 +164,23 @@ namespace any
 	}
 }
 
-template<class Scheduler>
-struct scheduler_env
-{
-	template<class Tag> constexpr auto query(::stdexec::get_completion_scheduler_t<Tag>) const { return *_scheduler; }
-	Scheduler* _scheduler;
-};
-
 struct any_scheduler final
 {
 	using self_type = any_scheduler;
+	struct inplace_construct_tag{};
+
 	struct schedule_type : any::awaitable_wrapper
 	{
 		using base_type = any::awaitable_wrapper;
-		NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR explicit(false) schedule_type(any_scheduler* self, auto&&... args)
+		NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR explicit(false) schedule_type(any::scheduler_wrapper wrapper, auto&&... args)
 			// noexcept(::std::is_nothrow_constructible_v<base_type, decltype(args)...>)
 			requires ::std::constructible_from<base_type, decltype(args)...>
 			: base_type(::std::forward<decltype(args)>(args)...)
-			, _self(self)
+			, _scheduler(::std::move(wrapper))
 		{}
-		constexpr auto get_env() const noexcept { return scheduler_env{ _self }; }
-		any_scheduler* _self;
+		constexpr auto&& get_env() const noexcept { return *this; }
+		template<class Tag> constexpr auto query(::stdexec::get_completion_scheduler_t<Tag>) const { return any_scheduler{ inplace_construct_tag{}, _scheduler }; }
+		any::scheduler_wrapper _scheduler;
 	};
 
 	NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR any_scheduler(self_type const&) = default;
@@ -204,9 +192,13 @@ struct any_scheduler final
 			&& ::stdexec::scheduler<decltype(scheduler)>
 		: _wrapper(any::erase_scheduler(::std::forward<decltype(scheduler)>(scheduler)))
 	{}
-	NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR auto schedule() { return schedule_type(this, any::erase_awaitable(_wrapper.schedule())); }
+	NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR auto schedule() const { return schedule_type(_wrapper, any::erase_awaitable(_wrapper.schedule())); }
 	NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR bool operator==(self_type const&) const = default;
 
+private:
+	NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR any_scheduler(inplace_construct_tag, any::scheduler_wrapper wrapper)
+		: _wrapper(::std::move(wrapper))
+	{}
 	any::scheduler_wrapper _wrapper;
 };
 

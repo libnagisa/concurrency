@@ -149,14 +149,13 @@ int main() {
 #if USE_PTHREAD
 	{
 		auto handle = __.native_handle();
-		sched_param sch_params{};
+		::sched_param sch_params{};
 		sch_params.sched_priority = 90;
-		if (pthread_setschedparam(handle, SCHED_FIFO, &sch_params) != 0) {
-			std::cerr << "Failed to set SCHED_FIFO, need sudo or CAP_SYS_NICE\n";
+		if (::pthread_setschedparam(handle, SCHED_FIFO, &sch_params) != 0) {
+			::std::cerr << "Failed to set SCHED_FIFO, need sudo or CAP_SYS_NICE\n";
 		}
 		else {
-			std::cout << "Thread switched to SCHED_FIFO priority "
-				<< priority << "\n";
+			::std::cout << "Thread switched to SCHED_FIFO priority\n";
 		}
 	}
 #endif

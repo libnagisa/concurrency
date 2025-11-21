@@ -126,13 +126,11 @@ timer(Scheduler) -> timer<Scheduler>;
 using clock_type = ::std::chrono::system_clock;
 clock_type::time_point current_now = clock_type::now();
 
-::std::mutex mutex;
-::nc::simple_task<void> print(::stdexec::inplace_stop_token stop_token, int id)
+::nc::simple_task<void> print(int id)
 {
 	using ::std::chrono::duration_cast;
 	using ::std::chrono::milliseconds;
 
-	::std::unique_lock l(mutex);
 	::std::cout << duration_cast<milliseconds>(clock_type::now() - current_now).count()
 				<< " ms:  [coro] id=" << id
 				<<  '\n';
@@ -173,7 +171,7 @@ int main() {
 	for (auto id : ::std::views::iota(0u, durations.size()))
 	{
 		auto duration = durations[id];
-		::nc::spawn(t.get_scheduler(current_now + duration), ::print(stop_source.get_token(), id));
+		::nc::spawn(t.get_scheduler(current_now + duration), ::print(id));
 	}
 	::std::this_thread::sleep_for(5s);
 	std::cout << "main: requesting stop\n";

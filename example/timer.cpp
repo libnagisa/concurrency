@@ -163,15 +163,17 @@ int main() {
 	auto _ = ::std::jthread([&] { t.run(stop_source.get_token());  });
 
 	current_now = clock_type::now();
-	for (auto [id, duration] : ::std::array{
+	auto durations = ::std::array{
 			3000ms,
 			100ms,
 			150ms,
 			500ms,
 			300ms,
 			2000ms,
-		} | ::std::views::enumerate)
+	};
+	for (auto id : ::std::views::iota(0u, durations.size()))
 	{
+		auto duration = durations[id];
 		::nc::spawn(t.get_scheduler(current_now + duration), ::print(stop_source.get_token(), id));
 	}
 	::std::this_thread::sleep_for(5s);

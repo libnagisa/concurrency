@@ -9,11 +9,14 @@
 #include <ranges>
 
 #include <stdexec/execution.hpp>
-#include <exec/static_thread_pool.hpp>
-#include <exec/task.hpp>
 #include <nagisa/concurrency/concurrency.h>
-#include <exec/timed_scheduler.hpp>
 
+#if __has_include<pthread.h>
+#	define USE_PTHREAD 1
+#	include <pthread.h>
+#else
+#	define USE_PTHREAD 0
+#endif
 
 namespace nc = ::nagisa::concurrency;
 template<class TimePoint>
@@ -91,6 +94,7 @@ struct timer
 	struct scheduler
 	{
 		self_type* _self;
+		time_point_type _time_point = {};
 		struct at : ::std::suspend_always
 		{
 			constexpr auto&& get_env() const noexcept { return *this; }
@@ -104,11 +108,12 @@ struct timer
 			time_point_type _due;
 		};
 		constexpr static auto now() noexcept { return clock_type::now(); }
-		constexpr auto schedule() const noexcept { return schedule_at(now()); }
+		constexpr auto schedule() const noexcept { return scheduler::schedule_at(_time_point); }
 		constexpr auto schedule_at(time_point_type tp) const noexcept { return at{ {}, _self, tp }; }
 		constexpr bool operator==(const scheduler&) const = default;
 	};
 	constexpr auto get_scheduler() noexcept { return scheduler{ this }; }
+	constexpr auto get_scheduler(time_point_type time_point) noexcept { return scheduler{ this, time_point }; }
 
 	timer(scheduler_type scheduler) : _other_scheduler(scheduler) {}
 
@@ -122,29 +127,39 @@ using clock_type = ::std::chrono::system_clock;
 clock_type::time_point current_now = clock_type::now();
 
 ::std::mutex mutex;
-::nc::simple_task<void> delay_print(auto sche, ::stdexec::inplace_stop_token stop_token, clock_type::duration duration, int id)
+::nc::simple_task<void> print(::stdexec::inplace_stop_token stop_token, int id)
 {
 	using ::std::chrono::duration_cast;
 	using ::std::chrono::milliseconds;
 
-	co_await ::exec::schedule_after(sche, duration);
 	::std::unique_lock l(mutex);
 	::std::cout << duration_cast<milliseconds>(clock_type::now() - current_now).count()
 				<< " ms:  [coro] id=" << id
-				<< " on thread " << std::this_thread::get_id()
-				<< " duration = " << duration_cast<milliseconds>(duration).count() << " ms"
 				<<  '\n';
+	co_return;
 }
 
 int main() {
 	using namespace ::std::chrono_literals;
 
-	auto num_workers = ::std::max(1u, std::thread::hardware_concurrency());
-	std::cout << "starting static_thread_pool with " << num_workers << " workers\n";
-
-	exec::static_thread_pool pool{ num_workers };
-	auto t = timer<decltype(pool.get_scheduler()), clock_type>(pool.get_scheduler());
+	::stdexec::run_loop loop{};
+	auto t = timer<decltype(loop.get_scheduler()), clock_type>(loop.get_scheduler());
 	auto stop_source = ::stdexec::inplace_stop_source{};
+	auto __ = ::std::jthread([&] { loop.run();  });
+#if USE_PTHREAD
+	{
+		auto handle = __.native_handle();
+		sched_param sch_params{};
+		sch_params.sched_priority = 90;
+		if (pthread_setschedparam(handle, SCHED_FIFO, &sch_params) != 0) {
+			std::cerr << "Failed to set SCHED_FIFO, need sudo or CAP_SYS_NICE\n";
+		}
+		else {
+			std::cout << "Thread switched to SCHED_FIFO priority "
+				<< priority << "\n";
+		}
+	}
+#endif
 	auto _ = ::std::jthread([&] { t.run(stop_source.get_token());  });
 
 	current_now = clock_type::now();
@@ -157,11 +172,11 @@ int main() {
 			2000ms,
 		} | ::std::views::enumerate)
 	{
-		::nc::spawn(::stdexec::inline_scheduler{}, ::delay_print(t.get_scheduler(), stop_source.get_token(), duration, id));
+		::nc::spawn(t.get_scheduler(current_now + duration), ::print(stop_source.get_token(), id));
 	}
 	::std::this_thread::sleep_for(5s);
 	std::cout << "main: requesting stop\n";
 	stop_source.request_stop();
-	pool.request_stop();
+	loop.finish();
 	return 0;
 }

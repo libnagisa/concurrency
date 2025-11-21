@@ -11,7 +11,7 @@
 #include <stdexec/execution.hpp>
 #include <nagisa/concurrency/concurrency.h>
 
-#if __has_include<pthread.h>
+#if __has_include(<pthread.h>)
 #	define USE_PTHREAD 1
 #	include <pthread.h>
 #else

@@ -16,7 +16,6 @@ struct scheduler
 		auto await_resume() const noexcept
 		{
 			::std::cout << "scheduler[" << *_scheduler->_id << "] scheduling coroutine on thread " << std::this_thread::get_id() << '\n';
-			return false;
 		}
 
 		constexpr auto&& get_env() const noexcept { return *this; }
@@ -69,6 +68,13 @@ int main()
 	}
 	{
 		g2(env);
+	}
+	{
+		::stdexec::run_loop loop{};
+		::nc::spawn(loop.get_scheduler(), g2(env));
+		auto _ = ::std::jthread([&] { loop.run(); });
+		::std::this_thread::sleep_for(::std::chrono::milliseconds(500));
+		loop.finish();
 	}
 
 	return 0;

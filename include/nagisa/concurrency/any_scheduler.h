@@ -107,6 +107,7 @@ namespace any
 		constexpr virtual ~basic_scheduler() noexcept = default;
 		constexpr virtual awaitable_wrapper schedule() = 0;
 		constexpr virtual bool operator==(basic_scheduler const&) const = 0;
+		constexpr virtual ::std::unique_ptr<basic_scheduler> _clone() const = 0;
 	};
 	template<::stdexec::scheduler T>
 	struct scheduler_eraser : basic_scheduler
@@ -126,14 +127,25 @@ namespace any
 				return false;
 			return _scheduler == ptr->_scheduler;
 		}
+		constexpr std::unique_ptr<basic_scheduler> _clone() const override
+		{
+			return ::std::make_unique<scheduler_eraser>(_scheduler);
+		}
 
 		scheduler_type _scheduler;
 	};
 
 	struct scheduler_wrapper
 	{
-		NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR scheduler_wrapper(scheduler_wrapper const& other) = default;
-		NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR scheduler_wrapper& operator=(scheduler_wrapper const& other) = default;
+		NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR scheduler_wrapper(scheduler_wrapper const& other) : _scheduler(other._scheduler->_clone()) {}
+		NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR scheduler_wrapper& operator=(scheduler_wrapper const& other)
+		{
+			if (this == ::std::addressof(other))
+				return *this;
+			auto self = ::std::move(*this);
+			_scheduler = other._scheduler->_clone();
+			return *this;
+		}
 		NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR scheduler_wrapper(scheduler_wrapper&&) noexcept = default;
 		NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR scheduler_wrapper& operator=(scheduler_wrapper&&) noexcept = default;
 		NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR explicit(false) scheduler_wrapper(auto&&... args)
@@ -144,8 +156,7 @@ namespace any
 		[[nodiscard]] NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR decltype(auto) schedule() const { return _scheduler->schedule(); }
 		NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR decltype(auto) operator==(scheduler_wrapper const& other) const { return _scheduler->operator==(*other._scheduler); }
 
-		// ::std::unique_ptr<basic_scheduler> _scheduler;
-		::std::shared_ptr<basic_scheduler> _scheduler;
+		::std::unique_ptr<basic_scheduler> _scheduler;
 	};
 	constexpr ::std::convertible_to<scheduler_wrapper const&> decltype(auto) erase_scheduler(::stdexec::scheduler auto&& s)
 	{

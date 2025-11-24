@@ -45,7 +45,11 @@ namespace awaitable_traits
 			if constexpr(requires(Promise & promise) { { get_unhandled_exception_ptr(promise) } -> ::std::convertible_to<::std::exception_ptr const&>; })
 			{
 				if (auto exception_ptr = get_unhandled_exception_ptr(handle.promise()))
-					::std::rethrow_exception(exception_ptr);
+				{
+					auto is_throw = static_cast<bool>(exception_ptr);
+					if (is_throw)
+						::std::rethrow_exception(exception_ptr);
+				}
 			}
 		}
 	};

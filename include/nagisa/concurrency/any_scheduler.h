@@ -86,7 +86,7 @@ namespace any
 
 		::std::unique_ptr<basic_awaitable> _awaitable;
 	};
-	constexpr decltype(auto) erase_awaitable(awaitable<noop_promise> auto&& a)
+	NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR decltype(auto) erase_awaitable(awaitable<noop_promise> auto&& a)
 	{
 		if constexpr (::std::convertible_to<decltype(a), awaitable_wrapper const&>)
 			return ::std::forward<decltype(a)>(a);
@@ -119,7 +119,7 @@ namespace any
 		: _scheduler(::std::forward<decltype(args)>(args)...)
 		{
 		}
-		constexpr awaitable_wrapper schedule() override { return any::erase_awaitable(::stdexec::schedule(_scheduler)); }
+		NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR awaitable_wrapper schedule() override { return any::erase_awaitable(::stdexec::schedule(_scheduler)); }
 		constexpr bool operator==(basic_scheduler const& other) const override
 		{
 			auto ptr = dynamic_cast<scheduler_eraser const*>(::std::addressof(other));
@@ -127,7 +127,7 @@ namespace any
 				return false;
 			return _scheduler == ptr->_scheduler;
 		}
-		constexpr std::unique_ptr<basic_scheduler> _clone() const override
+		NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR std::unique_ptr<basic_scheduler> _clone() const override
 		{
 			return ::std::make_unique<scheduler_eraser>(_scheduler);
 		}
@@ -158,7 +158,7 @@ namespace any
 
 		::std::unique_ptr<basic_scheduler> _scheduler;
 	};
-	constexpr ::std::convertible_to<scheduler_wrapper const&> decltype(auto) erase_scheduler(::stdexec::scheduler auto&& s)
+	NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR ::std::convertible_to<scheduler_wrapper const&> decltype(auto) erase_scheduler(::stdexec::scheduler auto&& s)
 	{
 		if constexpr (::std::convertible_to<decltype(s), scheduler_wrapper const&>)
 			return ::std::forward<decltype(s)>(s);

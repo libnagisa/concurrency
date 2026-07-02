@@ -1,10 +1,23 @@
 #pragma once
 
+/// @file with_scheduler.h
+/// @brief Scheduler-attached promise mixin and the matching
+///        @c await_suspend trait that captures a parent's scheduler.
+
 #include "./environment.h"
 
 NAGISA_BUILD_LIB_DETAIL_BEGIN
 
 
+/// @brief CPO: assigns a scheduler to a promise.
+///
+/// Dispatches in this order:
+///   1. @c promise.set_scheduler(s) — member function.
+///   2. <tt>tag_invoke(set_scheduler_t{}, promise, s)</tt> — ADL.
+///
+/// Used by both the @c capture_scheduler trait (to propagate the
+/// parent's scheduler) and by user code that wants to inject a
+/// scheduler before launching the coroutine.
 inline constexpr struct set_scheduler_t
 {
 	enum class _requires_result
@@ -36,6 +49,13 @@ inline constexpr struct set_scheduler_t
 namespace awaitable_traits
 {
 #if NAGISA_CONCURRENCY_USE_EXECUTION
+	/// @brief Awaitable trait: on suspend, copy the parent's scheduler
+	///        into the awaited coroutine's promise.
+	///
+	/// Reads @c stdexec::get_scheduler(get_env(parent.promise())) and
+	/// forwards it to @c set_scheduler on the child promise. Silently
+	/// no-ops when the parent has no scheduler or the child promise
+	/// can't accept it.
 	template<class Promise, class ParentPromise>
 	struct capture_scheduler
 	{
@@ -57,6 +77,14 @@ namespace promises
 #if NAGISA_CONCURRENCY_USE_EXECUTION
 
 	// template<::stdexec::scheduler Scheduler = ::stdexec::inline_scheduler>
+
+	/// @brief Promise mixin: stores a scheduler and exposes it via
+	///        @c get_env() for @c stdexec::get_scheduler queries.
+	///
+	/// Implements @c set_scheduler so the @c set_scheduler_t CPO and the
+	/// @c capture_scheduler trait can update the value.
+	///
+	/// @tparam Scheduler The scheduler type to store.
 	template<class Scheduler = ::stdexec::inline_scheduler>
 	struct with_scheduler
 	{
@@ -84,7 +112,7 @@ namespace promises
 			requires ::std::constructible_from<scheduler_type, decltype(::stdexec::get_scheduler(env))>
 			: _scheduler(::stdexec::get_scheduler(env))
 		{}
-		
+
 
 		constexpr auto get_env() const noexcept { return env_type{ this }; }
 		constexpr void set_scheduler(auto&& sched)
@@ -96,6 +124,13 @@ namespace promises
 		scheduler_type _scheduler;
 	};
 
+	/// @brief Specialization for "scheduler may be absent".
+	///
+	/// Wraps an @c std::optional<Scheduler> so the promise can start
+	/// without a scheduler and have one filled in later (e.g. by
+	/// @c capture_scheduler when first awaited). Queries on the env
+	/// dereference the optional — calling before a scheduler is set
+	/// will throw.
 	template<class Scheduler>
 	struct with_scheduler<::std::optional<Scheduler>>
 	{

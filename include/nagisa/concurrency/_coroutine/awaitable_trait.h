@@ -1,11 +1,85 @@
 #pragma once
 
+/// @file awaitable_trait.h
+/// @brief Trait-driven assembly of awaiter types.
+///
+/// ## Why
+///
+/// Writing an awaiter by hand means choosing a behavior for each of the
+/// three awaiter hooks — @c await_ready, @c await_suspend, @c await_resume —
+/// and often a fourth: per-instance state that lives between
+/// @c await_suspend and @c await_resume (a "context"). Most behaviors
+/// (capture the parent's scheduler, capture its stop token, rethrow
+/// exceptions, destroy the frame on resume, ...) are orthogonal and
+/// reusable across task types.
+///
+/// This file lets you declare each behavior as a small **trait**, then
+/// combine a list of traits into a single awaiter type whose hook bodies
+/// are the merged versions of all selected traits.
+///
+/// ## What a trait looks like
+///
+/// @code
+/// struct my_trait {
+///     // Optional: per-instance state, constructed on awaiter init.
+///     // static auto create_context(handle_type h);
+///     // static auto create_context(handle_type h, ParentPromise& p);
+///
+///     // Optional: any of the three hooks. Each may take the context
+///     // as a first argument, or omit it.
+///     static bool                 await_ready  (handle_type);
+///     static auto                 await_suspend(handle_type self,
+///                                               coroutine_handle<P> parent);
+///     static decltype(auto)       await_resume (handle_type);
+/// };
+/// @endcode
+///
+/// A trait is templated on @c <Promise, ParentPromise>; only the hooks
+/// it actually defines participate in the merge.
+///
+/// ## Composition rules (when two traits both define the same hook)
+///
+///   - If both return @c void, both are invoked. The second is wrapped in
+///     a @ref scope_guard so it runs even if the first throws.
+///   - If only one returns @c void, the non-void one's result is the
+///     overall result; the void one is invoked as a side effect.
+///   - If both return non-void, that is a contradiction and the trait
+///     list won't compile.
+///
+/// Contexts from multiple traits are packed into a @c std::tuple so
+/// each hook receives the correct slice automatically.
+///
+/// ## Public surface
+///
+///   - @ref awaitable_trait_combiner — variadic combiner; nest with
+///     @c ::template @c type to peel off one level.
+///   - @ref build_awaitable_t — the usual user-facing alias: one-shot
+///     "give me the assembled awaiter for these traits".
+///   - @ref awaitable_trait_instance / @ref awaitable_trait_instance_t —
+///     the underlying awaiter object that stores the context and exposes
+///     the merged hooks.
+///   - @ref awaitable_trait_context_t — query a trait's context type.
+///
+/// See docs/06_combiner.md for a step-by-step walkthrough.
+
 #include "./awaiter.h"
 #include "./scope_guard.h"
 #include "./environment.h"
 
 NAGISA_BUILD_LIB_DETAIL_BEGIN
 
+/// @brief Combines a list of awaitable traits into a single
+///        @c template<Promise,Parent>::type that exposes the merged hooks.
+///
+/// Specializations:
+///   - empty pack — yields an empty struct; used as a base case.
+///   - one trait — yields the trait unchanged.
+///   - two traits — yields the merge of both, following the composition
+///     rules described in the file header.
+///   - more — recursive: <tt>combiner&lt;A, B, C, ...&gt;</tt> is
+///     <tt>combiner&lt;combiner&lt;A, B&gt;::type, C, ...&gt;</tt>.
+///
+/// Most users want @ref build_awaitable_t instead of this directly.
 template<template<class, class>class... Traits>
 struct awaitable_trait_combiner;
 
@@ -380,9 +454,16 @@ struct awaitable_trait_combiner<Trait1, Trait2, Rest...>
 	: awaitable_trait_combiner<awaitable_trait_combiner<Trait1, Trait2>::template type, Rest...>
 {};
 
+/// @brief Apply @ref awaitable_trait_combiner to a (Promise, Parent) pair.
 template<class Promise, class Parent, template<class, class>class... Traits>
 using awaitable_trait_combiner_t = awaitable_trait_combiner<Traits...>::template type<Promise, Parent>;
 
+/// @brief Metafunction: yields a single trait's per-instance context type
+///        (the value returned by @c Trait::create_context).
+///
+/// Specializations exist only when the trait actually defines
+/// @c create_context for the given (Promise, Parent); otherwise the type
+/// is absent and SFINAE skips it.
 template<class Trait, class Promise, class Parent>
 struct awaitable_trait_context;
 
@@ -401,10 +482,30 @@ struct awaitable_trait_context<Trait, Promise, void>
 	using type = ::std::invoke_result_t<at_details::create_context_t<Trait>, ::std::coroutine_handle<Promise>>;
 };
 
+/// @brief Convenience alias for @ref awaitable_trait_context.
 template<class Trait, class Promise, class Parent>
 	requires requires{ typename awaitable_trait_context<Trait, Promise, Parent>::type; }
 using awaitable_trait_context_t = typename awaitable_trait_context<Trait, Promise, Parent>::type;
 
+/// @brief The awaiter object produced by a single (already-combined) trait.
+///
+/// This is what @c co_await ultimately drives. It stores:
+///   - @c _coroutine — the @c handle to the awaited coroutine,
+///   - @c _context   — per-instance state, if any (see @ref awaitable_trait_context).
+///
+/// The three hooks (@c await_ready / @c await_suspend / @c await_resume)
+/// dispatch to the trait, forwarding @c _context as a first argument
+/// when the trait's hook takes one.
+///
+/// Two overload sets are provided: one for traits that don't define a
+/// context (then there is no @c _context member), and one for those that
+/// do. The trait-combiner machinery handles both transparently.
+///
+/// @tparam Promise The coroutine's promise type.
+/// @tparam Parent  The promise type of the suspending parent coroutine,
+///                 or @c void if unknown.
+/// @tparam Trait   A combined trait class template (typically produced
+///                 by @ref awaitable_trait_combiner).
 template<class Promise, class Parent, template<class, class>class Trait>
 struct awaitable_trait_instance_t
 {
@@ -499,6 +600,9 @@ public:
 	handle_type _coroutine;
 };
 
+/// @brief Wraps @ref awaitable_trait_instance_t into a
+///        @c template<Promise,Parent> form, suitable for use as the
+///        @c Awaitable parameter of @ref basic_task / @ref basic_fork.
 template<template<class, class>class Trait>
 struct awaitable_trait_instance
 {
@@ -506,6 +610,31 @@ struct awaitable_trait_instance
 	using type = awaitable_trait_instance_t<Promise, Parent, Trait>;
 };
 
+/// @brief One-shot: combine @p Traits and produce the assembled awaiter type.
+///
+/// Equivalent to:
+/// @code
+/// awaitable_trait_instance_t<
+///     Promise, Parent,
+///     awaitable_trait_combiner<Traits...>::template type
+/// >
+/// @endcode
+///
+/// Most user code builds a task type like:
+/// @code
+/// template<class Promise, class Parent>
+/// using my_awaitable = build_awaitable_t<
+///     Promise, Parent,
+///     awaitable_traits::ready_if_done,
+///     awaitable_traits::capture_scheduler,
+///     awaitable_traits::this_then_parent,
+///     awaitable_traits::run_this,
+///     awaitable_traits::release_value,
+///     awaitable_traits::rethrow_exception,
+///     awaitable_traits::destroy_after_resumed
+/// >;
+/// using my_task = basic_task<my_promise, my_awaitable>;
+/// @endcode
 template<class Promise, class Parent, template<class, class>class... Traits>
 using build_awaitable_t = awaitable_trait_instance_t<
 	Promise
@@ -513,6 +642,8 @@ using build_awaitable_t = awaitable_trait_instance_t<
 	, awaitable_trait_combiner<Traits...>::template type
 >;
 
+/// @brief Same as @ref build_awaitable_t but in @c ::type form, useful when
+///        you need to pass the assembled awaiter as a template-template parameter.
 template<template<class, class>class... Traits>
 struct build_awaitable
 {

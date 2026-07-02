@@ -1,10 +1,22 @@
 #pragma once
 
+/// @file value.h
+/// @brief Return-value storage components and the
+///        @c release_returned_value CPO.
+
 #include "./environment.h"
 
 NAGISA_BUILD_LIB_DETAIL_BEGIN
 
 
+/// @brief CPO: pulls the stored return value out of a promise (by move).
+///
+/// Dispatches in this order:
+///   1. @c promise.release_returned_value() — member function.
+///   2. <tt>tag_invoke(release_returned_value_t{}, promise)</tt> — ADL.
+///
+/// Used by @c awaitable_traits::release_value during @c await_resume to
+/// hand the @c co_return value over to the awaiter.
 inline constexpr struct release_returned_value_t
 {
 	enum class _requires_result
@@ -35,6 +47,11 @@ inline constexpr struct release_returned_value_t
 
 namespace awaitable_traits
 {
+	/// @brief Awaitable trait: on resume, return whatever the promise stored.
+	///
+	/// Calls @c release_returned_value on the promise. For
+	/// @c promises::value<void>, the trait's @c await_resume is itself
+	/// void, so the awaiter yields no value.
 	template<class Promise, class>
 	struct release_value
 	{
@@ -56,6 +73,13 @@ namespace promises
 
 	template<class T>
 	struct value;
+
+	/// @brief Promise mixin: stores a @c co_return value of type @p T.
+	///
+	/// Implements @c return_value (move-construct into an internal
+	/// @c std::optional) and @c release_returned_value (move out and reset).
+	///
+	/// @tparam T Must be move-constructible.
 	template<::std::move_constructible T>
 	struct value<T>
 	{
@@ -73,6 +97,11 @@ namespace promises
 
 		::std::optional<T> _value = ::std::nullopt;
 	};
+	/// @brief Promise mixin for coroutines that don't produce a value.
+	///
+	/// Provides @c return_void; intentionally does **not** define
+	/// @c release_returned_value, so @c release_value's @c await_resume
+	/// is itself void.
 	template<>
 	struct value<void>
 	{

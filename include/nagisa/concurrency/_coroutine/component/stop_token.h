@@ -1,9 +1,19 @@
 #pragma once
 
+/// @file stop_token.h
+/// @brief Stop-token plumbing: the @c set_stop_token CPO, promise
+///        mixins, and awaitable traits that propagate a parent
+///        coroutine's stop token down to a child.
+
 #include "./environment.h"
 
 NAGISA_BUILD_LIB_DETAIL_BEGIN
 
+/// @brief CPO: assigns a stop token to a promise.
+///
+/// Dispatches in this order:
+///   1. @c promise.set_stop_token(t) — member function.
+///   2. <tt>tag_invoke(set_stop_token_t{}, promise, t)</tt> — ADL.
 inline constexpr struct set_stop_token_t
 {
 	enum class _requires_result
@@ -32,6 +42,10 @@ inline constexpr struct set_stop_token_t
 	}
 } set_stop_token{};
 
+/// @brief Adapter callable: invokes @c request_stop on a stop source.
+///
+/// Used as the body of a stop callback when wiring an upstream stop
+/// token to a local @c inplace_stop_source.
 template<class Source>
 struct forward_stop_request {
 	Source& stop_source;
@@ -42,6 +56,8 @@ struct forward_stop_request {
 	}
 };
 
+/// @brief Holds a local stop source and the callback registered on the
+///        parent's stop token, so cancelling the parent triggers the local one.
 template<class Source, class Callback>
 struct connect_stop_token
 {
@@ -51,12 +67,16 @@ struct connect_stop_token
 
 #if NAGISA_CONCURRENCY_USE_EXECUTION
 
+/// @brief Trait: child promise can accept the parent's stop token directly
+///        (no adapter needed).
 template<class Promise, class Parent>
 concept direct_cpatrue_stop_token = requires(Promise& promise, Parent& parent)
 {
 	set_stop_token(promise, ::stdexec::get_stop_token(::stdexec::get_env(parent)));
 };
 
+/// @brief Trait: parent provides a stoppable token that supports
+///        registering a callback of type @p Callback.
 template<class Parent, class Callback>
 concept indirect_stop_token_provider =
 	(!::std::same_as<void, Parent>)
@@ -67,6 +87,18 @@ concept indirect_stop_token_provider =
 namespace awaitable_traits
 {
 
+	/// @brief Awaitable trait: capture a stop token from the parent into
+	///        the awaited child, possibly via an adapter source.
+	///
+	/// Three specializations are provided:
+	///   - default (no parent / no compatible token): no-op,
+	///   - direct: parent's token type assignable to child promise — copy directly,
+	///   - indirect: child wants a different token type — create a local
+	///     @c Source, register a callback on the parent's token that
+	///     forwards cancellation to the local source, then give the
+	///     local source's token to the child.
+	///
+	/// @tparam Source The adapter stop-source type used in the indirect path.
 	template<class Source, class Promise, class ParentPromise>
 	struct capture_stop_token_t {};
 
@@ -124,7 +156,14 @@ namespace awaitable_traits
 		using callback_type = ::stdexec::stop_callback_for_t<stop_token_type, forward_stop_request<Source>>;
 		using context_type = connect_stop_token<Source, ::std::optional<callback_type>>;
 
-		constexpr static auto create_context(handle_type self, ParentPromise& parent) noexcept
+		// see project/readme.md $/wd4100_instantiation_ice
+		constexpr static 
+#if defined(_MSC_VER) && !defined(__clang__)
+		context_type
+#else
+		auto
+#endif
+		create_context(handle_type self, ParentPromise& parent) noexcept
 		{
 			return context_type{};
 		}
@@ -136,6 +175,8 @@ namespace awaitable_traits
 		}
 	};
 
+	/// @brief Wraps @ref capture_stop_token_t into a @c template<P,Pa> form
+	///        for use as an entry in a @c build_awaitable_t trait list.
 	template<class Source>
 	struct capture_stop_token
 	{
@@ -143,6 +184,8 @@ namespace awaitable_traits
 		using type = capture_stop_token_t<Source, Promise, Parent>;
 	};
 
+	/// @brief Convenience: @c capture_stop_token specialized to use
+	///        @c stdexec::inplace_stop_source as the adapter.
 	template<class Promise, class Parent>
 	using capture_inplace_stop_token = capture_stop_token_t<::stdexec::inplace_stop_source, Promise, Parent>;
 }
@@ -150,6 +193,11 @@ namespace awaitable_traits
 
 namespace promises
 {
+	/// @brief Promise mixin for coroutines that don't model cancellation.
+	///
+	/// Provides @c unhandled_stopped that simply terminates — if a child
+	/// completes with @c stopped while this promise has no way to react,
+	/// the program is misconfigured.
 	struct without_stop_token
 	{
 		[[nodiscard]] static ::std::coroutine_handle<> unhandled_stopped() noexcept
@@ -159,6 +207,14 @@ namespace promises
 	};
 
 #if NAGISA_CONCURRENCY_USE_EXECUTION
+	/// @brief Promise mixin: holds a stop token and exposes it via
+	///        @c get_env() for @c stdexec::get_stop_token queries.
+	///
+	/// Implements @c set_stop_token (used by both the CPO and the
+	/// @c capture_*_stop_token traits) and @c stop_requested for direct
+	/// checks from the coroutine body.
+	///
+	/// @tparam StopToken The stop-token type to store.
 	template<class StopToken = ::stdexec::inplace_stop_token>
 	struct with_stop_token : without_stop_token
 	{

@@ -1,9 +1,22 @@
 #pragma once
 
+/// @file exception.h
+/// @brief Exception-handling components and the
+///        @c get_unhandled_exception_ptr CPO.
+
 #include "./environment.h"
 
 NAGISA_BUILD_LIB_DETAIL_BEGIN
 
+/// @brief CPO: retrieves a stored @c std::exception_ptr from a promise.
+///
+/// Dispatches in this order:
+///   1. @c promise.get_unhandled_exception_ptr() — member function.
+///   2. <tt>tag_invoke(get_unhandled_exception_ptr_t{}, promise)</tt> — ADL.
+///
+/// If neither is available, the call expression is ill-formed.
+/// Used by @c awaitable_traits::rethrow_exception after a child coroutine
+/// resumes, to propagate any captured exception up to the awaiter.
 inline constexpr struct get_unhandled_exception_ptr_t
 {
 	enum class _requires_result
@@ -34,6 +47,11 @@ inline constexpr struct get_unhandled_exception_ptr_t
 
 namespace awaitable_traits
 {
+	/// @brief Awaitable trait: on resume, if the awaited promise stored an
+	///        exception, rethrow it in the parent.
+	///
+	/// Pairs with @c promises::exception<true>, which captures
+	/// @c std::current_exception() in @c unhandled_exception().
 	template<class Promise, class>
 	struct rethrow_exception
 	{
@@ -59,6 +77,13 @@ namespace promises
 {
 	template<bool>
 	struct exception;
+
+	/// @brief Promise mixin: capture unhandled exceptions into an
+	///        @c std::exception_ptr for later rethrow.
+	///
+	/// Provides @c unhandled_exception() and exposes
+	/// @c get_unhandled_exception_ptr() so the
+	/// @c awaitable_traits::rethrow_exception trait can find it.
 	template<>
 	struct exception<true>
 	{
@@ -68,6 +93,11 @@ namespace promises
 		constexpr auto&& get_unhandled_exception_ptr() const noexcept { return _exception; }
 		::std::exception_ptr _exception{};
 	};
+	/// @brief Promise mixin: abort the process on unhandled exception.
+	///
+	/// Smaller and faster than the catching version. Use only when the
+	/// coroutine body is @c noexcept (or you treat any exception as a
+	/// program bug).
 	template<>
 	struct exception<false>
 	{

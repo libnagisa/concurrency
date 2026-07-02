@@ -28,7 +28,7 @@ auto main() -> int {
 	::exec::numa_policy numa{ exec::no_numa_policy{} };
 	::exec::static_thread_pool ctx{ 8 };
 	::stdexec::scheduler auto sch = ctx.get_scheduler();
-
+	::stdexec::operation_state;
 	::stdexec::sender auto begin = ::stdexec::schedule(sch);
 	::stdexec::sender auto hi_again = begin | ::stdexec::let_value(::hi_again);
 	::stdexec::sender auto add_42 = hi_again | ::stdexec::let_value(::add_42);

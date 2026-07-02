@@ -1,9 +1,24 @@
 #pragma once
 
+/// @file sync_invoke.h
+/// @brief @ref sync_invoke — call a function synchronously inside
+///        @c await_resume and use its return value as the @c co_await result.
+
 #include "./environment.h"
 
 NAGISA_BUILD_LIB_DETAIL_BEGIN
 
+/// @brief Awaitable that runs @c Fn(Args...) at @c await_resume time.
+///
+/// @c await_ready is @c true (inherited from @c suspend_never), so no
+/// suspension happens. The bound arguments are stored by-value (use
+/// reference types if you want by-reference). The result of the call
+/// becomes the value of the @c co_await expression.
+///
+/// @code
+///   int n = co_await sync_invoke{ []{ return 42; } };
+///   spawn(sched, sync_invoke{ [h]{ h.resume(); } });   // see example/timer.cpp
+/// @endcode
 template<class Fn, class... Args>
 	requires ::std::invocable<Fn, Args...>
 struct sync_invoke : ::std::suspend_never

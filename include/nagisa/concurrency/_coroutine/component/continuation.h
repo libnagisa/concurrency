@@ -1,10 +1,23 @@
 #pragma once
 
+/// @file continuation.h
+/// @brief Continuation plumbing — how a coroutine knows what to resume
+///        next when it finishes.
+
 #include "../coroutine_handle.h"
 #include "./environment.h"
 
 NAGISA_BUILD_LIB_DETAIL_BEGIN
 
+/// @brief CPO: sets the "continuation" that a coroutine should resume
+///        after @c final_suspend.
+///
+/// Dispatches in this order:
+///   1. @c promise.set_continuation(parent) — member function.
+///   2. <tt>tag_invoke(set_continuation_t{}, promise, parent)</tt> — ADL.
+///
+/// Used by @c awaitable_traits::this_then_parent in @c await_suspend to
+/// register the caller as the continuation of the awaited coroutine.
 inline constexpr struct set_continuation_t
 {
 	enum class _requires_result
@@ -34,6 +47,11 @@ inline constexpr struct set_continuation_t
 	}
 } set_continuation{};
 
+/// @brief CPO: reads back the continuation previously set on a promise.
+///
+/// Dispatches in this order:
+///   1. @c promise.continuation() — member function.
+///   2. <tt>tag_invoke(continuation_t{}, promise)</tt> — ADL.
 inline constexpr struct continuation_t
 {
 	enum class _requires_result
@@ -64,6 +82,16 @@ inline constexpr struct continuation_t
 
 namespace promises
 {
+	/// @brief Promise mixin: @c final_suspend symmetrically transfers to
+	///        the stored continuation (default: a noop coroutine).
+	///
+	/// Implements both @c set_continuation and @c continuation, so the
+	/// pair of CPOs above will find them. Combined with
+	/// @c awaitable_traits::this_then_parent, this gives the canonical
+	/// "child finishes → resume parent" structured-concurrency flow.
+	///
+	/// @tparam Handle The continuation handle type; defaults to the
+	///         erased @c std::coroutine_handle<>.
 	template<coroutine_handle Handle = ::std::coroutine_handle<>>
 	struct jump_to_continuation
 	{

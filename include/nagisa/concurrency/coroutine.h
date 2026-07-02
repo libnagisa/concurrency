@@ -1,4 +1,16 @@
-﻿#pragma once
+#pragma once
+
+/// @file coroutine.h
+/// @brief Re-exports the coroutine component library into
+///        @c nagisa::concurrency.
+///
+/// This header is normally not included directly — use
+/// @ref concurrency.h. It exists so that lower-level headers
+/// (@c simple_task.h, @c spawn.h, @c any_scheduler.h) can pull in only
+/// the component plumbing without dragging in the full public surface.
+///
+/// The @c details namespace is internal; everything re-exported below
+/// is the public API.
 
 #include "./_coroutine/awaiter.h"
 #include "./_coroutine/awaitable.h"
@@ -29,12 +41,14 @@
 
 NAGISA_BUILD_LIB_BEGIN
 
+// --- Concepts ---
 using details::awaitable;
 using details::awaitable_awaiter_t;
 using details::awaiter;
 using details::await_suspend_result;
 using details::awaiter_result_t;
 
+// --- Trait composition ---
 using details::awaitable_trait_combiner;
 using details::awaitable_trait_combiner_t;
 using details::awaitable_trait_instance;
@@ -42,19 +56,23 @@ using details::awaitable_trait_instance_t;
 using details::build_awaitable_t;
 using details::build_awaitable;
 
+// --- Utility awaitables ---
 using details::forward;
 using details::from_handle;
 using details::sync_invoke;
 using details::current_handle;
 using details::environment;
 
+// --- Task containers ---
 using details::basic_fork;
 using details::basic_task;
 using details::noop_awaitable;
 
+// --- Component namespaces ---
 namespace promises = details::promises;
 namespace awaitable_traits = details::awaitable_traits;
 
+// --- CPOs ---
 using details::get_unhandled_exception_ptr;
 using details::get_unhandled_exception_ptr_t;
 using details::release_returned_value;
@@ -68,8 +86,8 @@ using details::set_stop_token_t;
 using details::set_scheduler;
 using details::set_scheduler_t;
 
+// --- Misc ---
 using details::intro_type;
-
 using details::noop_promise;
 
 NAGISA_BUILD_LIB_END

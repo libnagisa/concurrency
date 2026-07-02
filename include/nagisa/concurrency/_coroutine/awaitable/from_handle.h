@@ -1,9 +1,27 @@
 #pragma once
 
+/// @file from_handle.h
+/// @brief @ref from_handle — an awaitable that builds its result from
+///        the suspending coroutine's handle.
+
 #include "./environment.h"
 
 NAGISA_BUILD_LIB_DETAIL_BEGIN
 
+/// @brief Awaitable wrapper: constructs a @c Result from the parent
+///        handle inside @c await_suspend, then returns it from
+///        @c await_resume.
+///
+/// @c await_suspend returns @c false (no real suspension — resume
+/// immediately), so the coroutine never actually unwinds. The
+/// @c Result lives in a union so it doesn't need to be
+/// default-constructible.
+///
+/// Typical use is in @c as_awaitable hooks that need to capture
+/// something derived from the caller's promise/handle.
+///
+/// @tparam Result The constructed value's type; must be move-constructible
+///                and destructible from the parent handle.
 template<class Result>
 	requires ::std::move_constructible<Result>&& ::std::destructible<Result>
 struct from_handle : ::std::suspend_always

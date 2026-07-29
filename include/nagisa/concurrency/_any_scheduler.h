@@ -97,6 +97,11 @@ namespace any
 		}
 		else
 		{
+			/// BUG: stdexec::as_awaitable(sender, p) 会在 __as_awaitable.hpp:441 内调用：`coroutine_handle<Promise>::from_promise(p)`
+			/// 但这里的 p 不属于任何协程帧，不满足 from_promise 的前置条件。随后虚接口虽然收到真实的 parent handle，底层 awaiter 已经捕获了伪造的 handle。
+			/// 实测结果：
+			///		stdexec::inline_scheduler：Release/NDEBUG 下 ASan 报非法地址访问，协程恢复到无效 handle。
+			///	这意味着当前方案无法安全地把一般 sender 转成这种非模板虚 awaiter。
 			noop_promise p{};
 			using awaitable_type = ::std::remove_reference_t<decltype(p.await_transform(::std::forward<decltype(a)>(a)))>;
 			return awaitable_wrapper(::std::make_unique<awaitable_eraser<awaitable_type>>(p.await_transform(::std::forward<decltype(a)>(a))));
@@ -142,6 +147,8 @@ namespace any
 		{
 			if (this == ::std::addressof(other))
 				return *this;
+			/// BUG: 中：异常和 moved-from 状态会产生空指针解引用
+			/// 复制赋值先把自身 move 空，再调用 _clone()。如果复制或分配抛异常，目标对象永久处于 _scheduler == nullptr 状态。
 			auto self = ::std::move(*this);
 			_scheduler = other._scheduler->_clone();
 			return *this;
@@ -190,7 +197,7 @@ struct any_scheduler final
 			, _scheduler(::std::move(wrapper))
 		{}
 		constexpr auto&& get_env() const noexcept { return *this; }
-		template<class Tag> constexpr auto query(::stdexec::get_completion_scheduler_t<Tag>) const { return any_scheduler{ inplace_construct_tag{}, _scheduler }; }
+		template<class Tag> constexpr auto query(::stdexec::get_completion_scheduler_t<Tag>) const noexcept { return any_scheduler{ inplace_construct_tag{}, _scheduler }; }
 		any::scheduler_wrapper _scheduler;
 	};
 
@@ -203,6 +210,17 @@ struct any_scheduler final
 			&& ::stdexec::scheduler<decltype(scheduler)>
 		: _wrapper(any::erase_scheduler(::std::forward<decltype(scheduler)>(scheduler)))
 	{}
+	/// BUG: 保存的是克隆 B，awaitable 却指向原对象 A
+	/// return schedule_type(
+	///		_wrapper,                              // 克隆出 B
+	///		any::erase_awaitable(_wrapper.schedule()) // 从 A 构造
+	///	);
+	///	如果底层 schedule() 返回的对象保存 this：
+	///	awaitable ──> A 
+	///	schedule_type ──owns── > B 
+	///	临时 any_scheduler 
+	///	销毁 A awaitable ── > 已释放内存
+	///	我用这种 scheduler 做了 ASan 验证，稳定得到 heap-use-after-free。这也不是刻意构造的陌生模式：仓库自带的 example/scheduler.cpp:14 正是通过 _scheduler = this 传递内部指针。
 	NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR auto schedule() const { return schedule_type(_wrapper, any::erase_awaitable(_wrapper.schedule())); }
 	NAGISA_CONCURRENCY_UNIQUE_PTR_CONSTEXPR bool operator==(self_type const&) const = default;
 

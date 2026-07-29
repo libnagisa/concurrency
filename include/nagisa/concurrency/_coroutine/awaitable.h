@@ -68,7 +68,7 @@ decltype(auto) get_awaiter(Awaitable&& a)
 template <class Awaitable, class Promise>
 decltype(auto) get_awaiter(Awaitable&& a, Promise& p)
 {
-	if constexpr (requires { p->await_transform(details::get_awaiter(static_cast<Awaitable&&>(a))); })
+	if constexpr (requires { p.await_transform(details::get_awaiter(static_cast<Awaitable&&>(a))); })
 	{
 		return p.await_transform(details::get_awaiter(static_cast<Awaitable&&>(a)));
 	}

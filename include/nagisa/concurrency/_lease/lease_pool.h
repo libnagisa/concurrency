@@ -204,16 +204,21 @@ public:
 	[[nodiscard]] token_type _extract_available()
 	{
 		auto token = ::std::move(_available_container.back());
-		try
+		if constexpr (noexcept(_available_container.pop_back()))
+			return token;
+		else
 		{
-			_available_container.pop_back();
+			try
+			{
+				_available_container.pop_back();
+			}
+			catch (...)
+			{
+				_available_container.back() = ::std::move(token);
+				throw;
+			}
+			return token;
 		}
-		catch (...)
-		{
-			_available_container.back() = ::std::move(token);
-			throw;
-		}
-		return token;
 	}
 	[[nodiscard]] ::std::optional<token_type> _take_or_enqueue(waiter_type& target)
 	{

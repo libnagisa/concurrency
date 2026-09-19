@@ -138,9 +138,10 @@ int main() {
 
 `spawn` 的语义：
 
-- 把 `work(...)` 包成一个内部的 driver 协程，driver 跳到 `scheduler` 上执行后 `co_await` 你的 task。
-- driver 的 promise 用了 [`exit_then_destroy`](./05_components.md#8-帧回收策略)——跑完自己 destroy 自己，**不需要你管销毁**。
-- 返回一个已 release 的裸 handle，你可以无视它。
+- 把 `work(...)` 包成一个内部的 **driver** 协程，driver 跳到 `scheduler` 上执行后 `co_await` 你的 task。
+- **driver** 的 promise 用了 [`exit_then_destroy`](./05_components.md#8-帧回收策略)——driver 跑完自己 destroy 自己，**不需要你管销毁**。
+- 被 spawn 的用户 task 仍走正常 await 清理路径；`exit_then_destroy` 不是给普通 task promise 用的。
+- 返回一个已 release 的裸 handle（driver 的），你可以无视它。
 
 ⚠️ **`spawn` 默认吞掉异常**。task 抛了什么，没人接，frame 析构时就丢了。如果你需要观测失败，要么不要用 `spawn`，要么写一个外层 task 自己 catch。
 

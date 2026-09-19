@@ -199,10 +199,11 @@ struct erased_promise
 | 不要 stop_token | 把 `with_stop_token<...>` 换成 `without_stop_token`，去掉 `capture_inplace_stop_token` |
 | 不能 `co_await` sender | 去掉 `with_await_transform`（很少这么做） |
 | eager（立即开始） | `lazy` 换 `eager`（或 `simple_task` 的 `Intro = eager`） |
-| detach 自销毁（无 awaiter） | 用 `exit_then_destroy`，去掉 `jump_to_continuation` 和 `this_then_parent` |
+| detach 自销毁（无 awaiter） | **仅** fire-and-forget 驱动协程用 `exit_then_destroy`；去掉 `jump_to_continuation` / `this_then_parent` / `destroy_after_resumed`。普通 `co_await` / sender task 不要用 |
 | 返回值类型不可移动 | 改 `value<T>` 的存储方式，或用引用包一层 |
 | 让 scheduler 类型擦除 | `with_scheduler<std::optional<any_scheduler>>` |
 | 多个 task 共享 frame（generator-like） | 不要 `destroy_after_resumed` + 不要 `exit_then_destroy`，自己管生命周期 |
+| 既要被 await，又想自销毁 | 做不到，二选一：要么 awaiter 销毁，要么 `final_suspend` 自销毁 |
 
 ---
 

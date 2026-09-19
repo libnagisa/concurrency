@@ -149,12 +149,23 @@ struct my_promise : promises::return_object_from_handle<my_task> { ... };
 
 谁负责销毁协程帧？两种典型选择：
 
-| 组件 | 协程跑完时 |
-|---|---|
-| `promises::default_exit` + `awaitable_traits::destroy_after_resumed` | promise 在 `final_suspend` 时挂起；**awaiter** 在 `await_resume` 后调 `destroy()` |
-| `promises::exit_then_destroy` | promise 在 `final_suspend` 时**自己**调 `destroy()`；适合 detached 任务（没有 awaiter 帮你清理） |
+| 组件 | 协程跑完时 | 适用场景 |
+|---|---|---|
+| `promises::default_exit` + `awaitable_traits::destroy_after_resumed` | promise 在 `final_suspend` 时挂起；**awaiter** 在 `await_resume` 后调 `destroy()` | 普通 task：`co_await task`、task-as-sender / `connect` |
+| `promises::exit_then_destroy` | promise 在 `final_suspend` 时**自己**调 `destroy()` | **仅** detached / fire-and-forget，且帧只有自己拥有 |
 
-第一种是 `simple_task` 用的——task 被 await 时所有权转给 awaiter，awaiter 跑完销毁。第二种是 `spawn_task` 用的——detach 出去没人管，自己活完自己死。
+### 怎么选
+
+- **普通 awaitable / sender task**（`simple_task` 这条路）：用 `default_exit` + `destroy_after_resumed`。
+  协程停在 `final_suspend`，等外层 awaiter / opstate 取完结果后再销毁。
+- **detached 自销毁驱动协程**（`spawn` 的内部 driver）：用 `exit_then_destroy`。
+  没有 awaiter 会再来 `await_resume` / `destroy()`，所以只能自己在 `final_suspend` 销毁。
+
+### 不要混用
+
+- 不要给会被 `co_await` 或 `connect` 的 task 配 `exit_then_destroy`：外层还指望帧活着取结果 / resume 父协程。
+- 不要把 `exit_then_destroy` 和 `destroy_after_resumed` 叠在一起：会 double-free。
+- `spawn` 只是让**内部 driver promise** 用 `exit_then_destroy`；被 spawn 的用户 task 仍然走正常 await 清理路径。
 
 ---
 

@@ -98,8 +98,8 @@ h.destroy();
 
 **`release()` 之后调用方必须保证 handle 最终被销毁**，否则就是协程帧泄漏。常见做法有两种：
 
-1. 让 promise 用 [`exit_then_destroy`](./05_components.md#exit) ——协程跑完 `final_suspend` 时自动 `destroy()`。`spawn` 就是这么做的。
-2. 自己存好 handle，在合适时机调 `destroy()`。
+1. 自己存好 handle，在合适时机调 `destroy()`。
+2. 仅当这是 **detached / fire-and-forget** 协程、且之后再也不会有 awaiter 来接管时，让 promise 用 [`exit_then_destroy`](./05_components.md#8-帧回收策略)——协程跑完 `final_suspend` 时自动 `destroy()`。`spawn` 的**内部 driver** 就是这么做的；普通用户 task 通常不要这么配。
 
 ---
 
@@ -126,8 +126,10 @@ h.destroy();
 // 模式 C：交给 spawn（detach 启动）
 {
     nc::spawn(stdexec::inline_scheduler{}, f1(5));
-    // spawn 内部使用了 exit_then_destroy 组件，
-    // 协程跑完 final_suspend 时自动销毁。
+    // spawn 的内部 driver 使用 exit_then_destroy：
+    // driver 跑完 final_suspend 时自动销毁自己。
+    // 用户 task f1 仍由 driver 内的正常 await 路径清理，
+    // 不要给普通 task promise 也配 exit_then_destroy。
 }
 ```
 
@@ -172,7 +174,8 @@ using simple_task<T> = basic_task<simple_promise<T, ...>, simple_awaitable>;
 | 错误 | 现象 | 怎么改 |
 |---|---|---|
 | 把 lazy task 析构而没启动 | 协程帧分配了又被销毁，什么都没跑 | 启动之 (`handle().resume()`) 或交给 `spawn` |
-| `release()` 后忘了 `destroy()` | 内存泄漏 | 用带 `exit_then_destroy` 的 promise（如 `spawn_promise`），或手动 destroy |
+| `release()` 后忘了 `destroy()` | 内存泄漏 | 手动 `destroy()`；**仅** detached 自销毁驱动才用 `exit_then_destroy`（如 `spawn_promise`） |
+| 给普通 task 配 `exit_then_destroy` | double-free / 无法取结果 / 父协程无法 resume | 普通 task 用 `default_exit` + `destroy_after_resumed` |
 | `co_await t;`（左值） | 编译失败 | `co_await std::move(t)` |
 | 同一个 task 被 `co_await` 两次 | 编译失败（首次已 release） | 第二次起把它换成 `basic_fork` |
 | 多线程同时 `resume()` 同一 handle | 未定义行为 | 用 scheduler 串行化恢复 |

@@ -19,10 +19,15 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="include\nagisa\concurrency\lease.h" />
+    <ClInclude Include="include\nagisa\concurrency\when_all_range.h" />
+    <ClInclude Include="include\nagisa\concurrency\_any_scheduler.h" />
     <ClInclude Include="include\nagisa\concurrency\await_std\chrono.h" />
     <ClInclude Include="include\nagisa\concurrency\coroutine.h" />
     <ClInclude Include="include\nagisa\concurrency\environment.h" />
     <ClInclude Include="include\nagisa\concurrency\concurrency.h" />
+    <ClInclude Include="include\nagisa\concurrency\simple_task.h" />
+    <ClInclude Include="include\nagisa\concurrency\spawn.h" />
     <ClInclude Include="include\nagisa\concurrency\_coroutine\any_scheduler.h" />
     <ClInclude Include="include\nagisa\concurrency\_coroutine\awaitable.h" />
     <ClInclude Include="include\nagisa\concurrency\_coroutine\awaitable\env.h" />
@@ -41,6 +46,7 @@
     <ClInclude Include="include\nagisa\concurrency\_coroutine\component\intro.h" />
     <ClInclude Include="include\nagisa\concurrency\_coroutine\component\custom.h" />
     <ClInclude Include="include\nagisa\concurrency\_coroutine\component\return_object.h" />
+    <ClInclude Include="include\nagisa\concurrency\_coroutine\component\stop.h" />
     <ClInclude Include="include\nagisa\concurrency\_coroutine\component\with_scheduler.h" />
     <ClInclude Include="include\nagisa\concurrency\_coroutine\component\stop_token.h" />
     <ClInclude Include="include\nagisa\concurrency\_coroutine\component\value.h" />
@@ -50,12 +56,92 @@
     <ClInclude Include="include\nagisa\concurrency\_coroutine\coroutine_handle.h" />
     <ClInclude Include="include\nagisa\concurrency\_coroutine\awaitable\current_handle.h" />
     <ClInclude Include="include\nagisa\concurrency\_coroutine\environment.h" />
+    <ClInclude Include="include\nagisa\concurrency\_coroutine\noop_promise.h" />
+    <ClInclude Include="include\nagisa\concurrency\_coroutine\macro_pop.h" />
     <ClInclude Include="include\nagisa\concurrency\_coroutine\promise.h" />
+    <ClInclude Include="include\nagisa\concurrency\_coroutine\macro_push.h" />
     <ClInclude Include="include\nagisa\concurrency\_coroutine\scope_guard.h" />
     <ClInclude Include="include\nagisa\concurrency\_coroutine\spawn.h" />
     <ClInclude Include="include\nagisa\concurrency\_coroutine\task.h" />
     <ClInclude Include="include\nagisa\concurrency\_coroutine\simple_task.h" />
     <ClInclude Include="include\nagisa\concurrency\await_std\environment.h" />
+    <ClInclude Include="include\nagisa\concurrency\_forward_stop_token.h" />
+    <ClInclude Include="include\nagisa\concurrency\_lease\available_container.h" />
+    <ClInclude Include="include\nagisa\concurrency\_lease\bounded_lease_pool.h" />
+    <ClInclude Include="include\nagisa\concurrency\_lease\bounded_stack.h" />
+    <ClInclude Include="include\nagisa\concurrency\_lease\environment.h" />
+    <ClInclude Include="include\nagisa\concurrency\_lease\lease_pool.h" />
+    <ClInclude Include="include\nagisa\concurrency\_lease\macro_pop.h" />
+    <ClInclude Include="include\nagisa\concurrency\_lease\macro_push.h" />
+    <ClInclude Include="include\nagisa\concurrency\_lease\token.h" />
+    <ClInclude Include="include\nagisa\concurrency\_spawn.h" />
+    <ClInclude Include="include\nagisa\concurrency\_when_all_range\completion_kind.h" />
+    <ClInclude Include="include\nagisa\concurrency\_when_all_range\environment.h" />
+    <ClInclude Include="include\nagisa\concurrency\_when_all_range\manual_lifetime.h" />
+    <ClInclude Include="include\nagisa\concurrency\_when_all_range\when_all_range.h" />
+    <ClInclude Include="test\lease\move_only_token.h" />
+    <ClInclude Include="test\lease\support.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="bug\msvc\wd4100_instantiation_ice\capture_stop_token.cpp" />
+    <ClCompile Include="bug\msvc\wd4100_instantiation_ice\run_this.cpp" />
+    <ClCompile Include="example\coroutine\core.cpp" />
+    <ClCompile Include="example\lease\acquire.cpp" />
+    <ClCompile Include="example\lease\exception.cpp" />
+    <ClCompile Include="example\lease\limiter.cpp" />
+    <ClCompile Include="example\lease\move_only.cpp" />
+    <ClCompile Include="example\lease\resource_pool.cpp" />
+    <ClCompile Include="example\lease\supply.cpp" />
+    <ClCompile Include="test\lease\acquire_sync_wait.cpp" />
+    <ClCompile Include="test\lease\bounded.cpp" />
+    <ClCompile Include="test\lease\cancel_already_stopped.cpp" />
+    <ClCompile Include="test\lease\cancel_waiting.cpp" />
+    <ClCompile Include="test\lease\construct_copy.cpp" />
+    <ClCompile Include="test\lease\construct_in_place.cpp" />
+    <ClCompile Include="test\lease\construct_move.cpp" />
+    <ClCompile Include="test\lease\co_await.cpp" />
+    <ClCompile Include="test\lease\co_await_wait.cpp" />
+    <ClCompile Include="test\lease\custom_token.cpp" />
+    <ClCompile Include="test\lease\empty.cpp" />
+    <ClCompile Include="test\lease\exception_back.cpp" />
+    <ClCompile Include="test\lease\exception_empty.cpp" />
+    <ClCompile Include="test\lease\exception_pop_back.cpp" />
+    <ClCompile Include="test\lease\exception_push_back.cpp" />
+    <ClCompile Include="test\lease\exception_size.cpp" />
+    <ClCompile Include="test\lease\fifo_waiters.cpp" />
+    <ClCompile Include="test\lease\let_value.cpp" />
+    <ClCompile Include="test\lease\lifo.cpp" />
+    <ClCompile Include="test\lease\limiter.cpp" />
+    <ClCompile Include="test\lease\move_only.cpp" />
+    <ClCompile Include="test\lease\move_only_acquire.cpp" />
+    <ClCompile Include="test\lease\move_only_bounded.cpp" />
+    <ClCompile Include="test\lease\move_only_unique_ptr.cpp" />
+    <ClCompile Include="test\lease\raii.cpp" />
+    <ClCompile Include="test\lease\release_wakes.cpp" />
+    <ClCompile Include="test\lease\stop_ignored.cpp" />
+    <ClCompile Include="test\lease\supply.cpp" />
+    <ClCompile Include="test\lease\supply_wakes.cpp" />
+    <ClCompile Include="test\lease\then.cpp" />
+    <ClCompile Include="test\lease\token_concept.cpp" />
+    <ClCompile Include="test\lease\try_acquire.cpp" />
+    <ClCompile Include="test\lease\when_all_cancel.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="bug\msvc\wd4100_instantiation_ice\build.bat" />
+    <None Include="bug\msvc\wd4100_instantiation_ice\readme.md" />
+    <None Include="docs\01_concepts.md" />
+    <None Include="docs\02_quick_start.md" />
+    <None Include="docs\03_with_stdexec.md" />
+    <None Include="docs\04_task_anatomy.md" />
+    <None Include="docs\05_components.md" />
+    <None Include="docs\06_combiner.md" />
+    <None Include="docs\07_custom_task.md" />
+    <None Include="docs\README.md" />
+    <None Include="readme.md" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="CMakeLists.txt" />
+    <Text Include="test\CMakeLists.txt" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>

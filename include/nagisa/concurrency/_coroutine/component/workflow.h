@@ -62,7 +62,7 @@ NAGISA_BUILD_LIB_DETAIL_BEGIN
 		using promise_type = Promise;
 		using handle_type = ::std::coroutine_handle<promise_type>;
 
-		constexpr static decltype(auto) await_suspend(handle_type self, ::std::coroutine_handle<ParentPromise> parent) noexcept
+		constexpr static void await_suspend(handle_type self, ::std::coroutine_handle<ParentPromise> parent) noexcept
 		{
 			set_continuation(self.promise(), parent);
 		}
@@ -92,7 +92,7 @@ NAGISA_BUILD_LIB_DETAIL_BEGIN
 		using promise_type = Promise;
 		using handle_type = ::std::coroutine_handle<promise_type>;
 
-		constexpr static decltype(auto) await_suspend(handle_type self, ::std::coroutine_handle<ParentPromise> parent) noexcept
+		constexpr static void await_suspend(handle_type self, ::std::coroutine_handle<ParentPromise> parent) noexcept
 		{
 			set_continuation(self.promise(), continuation(parent));
 			set_continuation(parent, self);

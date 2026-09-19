@@ -216,16 +216,10 @@ namespace promises
 	///
 	/// @tparam StopToken The stop-token type to store.
 	template<class StopToken = ::stdexec::inplace_stop_token>
-	struct with_stop_token : without_stop_token
+	struct with_stop_token
 	{
 		using self_type = with_stop_token;
 		using stop_token_type = StopToken;
-		struct env_type
-		{
-			constexpr auto&& query(::stdexec::get_stop_token_t) const noexcept { return _self->_stop_token; }
-			self_type const* _self;
-		};
-
 
 		constexpr explicit(false) with_stop_token()
 			noexcept(::std::is_nothrow_default_constructible_v<stop_token_type>)
@@ -244,11 +238,11 @@ namespace promises
 			: _stop_token(::stdexec::get_stop_token(env))
 		{}
 
-		constexpr auto get_env() const noexcept { return env_type{ this }; }
-		[[nodiscard]] constexpr auto stop_requested() const noexcept
+		constexpr auto get_env() const noexcept
 		{
-			return _stop_token.stop_requested();
+			return ::stdexec::prop{ ::stdexec::get_stop_token, _stop_token };
 		}
+
 		constexpr auto set_stop_token(auto&& token) noexcept
 			requires ::std::assignable_from<stop_token_type&, decltype(token)>
 		{

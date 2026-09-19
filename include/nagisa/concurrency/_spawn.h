@@ -3,11 +3,16 @@
 /// @file spawn.h
 /// @brief @ref spawn — start a coroutine in detached fashion on a scheduler.
 ///
-/// The spawned coroutine takes responsibility for its own destruction
-/// (its promise uses @c exit_then_destroy), so the caller doesn't need
-/// to hold onto a handle. Exceptions are *captured* but not delivered
-/// to anyone — if the task throws, the exception will be silently
-/// discarded when the frame is destroyed. Use a different coroutine
+/// @c spawn creates an internal driver coroutine that owns its own lifetime.
+/// That **driver** promise uses @c exit_then_destroy so the caller need not
+/// keep the returned handle alive. The user task passed to @c spawn is
+/// simply @c co_await'ed by the driver; it should still use the normal
+/// awaitable/task cleanup path (typically @c default_exit +
+/// @c destroy_after_resumed), not @c exit_then_destroy itself.
+///
+/// Exceptions from the spawned work are *captured* by the driver but not
+/// delivered to anyone — if the task throws, the exception is silently
+/// discarded when the driver frame is destroyed. Use a different coroutine
 /// type if you need observability.
 
 #include <nagisa/concurrency/coroutine.h>
@@ -28,17 +33,24 @@ struct spawn_promise;
 /// @c release'd by @ref spawn.
 using spawn_task = basic_task<spawn_promise>;
 
-/// @brief Fire-and-forget promise: eager start, self-destroys on completion.
+/// @brief Fire-and-forget **driver** promise: eager start, self-destroys on completion.
 ///
-/// Component breakdown:
+/// This is the promise of @c spawn's internal driver coroutine, not a
+/// template for ordinary user tasks. Component breakdown:
 ///   - @c eager — runs as part of construction,
 ///   - @c return_object_from_handle — synthesizes @c get_return_object,
 ///   - @c exception<true> — captures unhandled exceptions (but no one
 ///     reads them; effectively swallowed when the frame is destroyed),
 ///   - @c value<void> — no return value,
-///   - @c exit_then_destroy — destroys the frame at @c final_suspend,
+///   - @c exit_then_destroy — destroys the **driver** frame at
+///     @c final_suspend because nothing will call @c destroy() later,
 ///   - @c without_stop_token — cancellation is not modeled,
 ///   - @c with_await_transform — sender support inside the spawned body.
+///
+/// Do not copy this exit policy onto a task that is meant to be
+/// @c co_await'ed, connected as a sender, or otherwise observed after
+/// completion. Those need an external owner and usually pair
+/// @c default_exit with @c destroy_after_resumed.
 struct spawn_promise
     : promises::eager
 	, promises::return_object_from_handle<spawn_promise, spawn_task>
@@ -74,12 +86,17 @@ spawn_task spawn_impl(::stdexec::scheduler auto scheduler, auto&& task) noexcept
 
 /// @brief Start a coroutine in detached fashion on @p scheduler.
 ///
-/// The returned value is the bare coroutine handle (already released
-/// from any owning task). The default @p Intro is @c eager: the
-/// spawned coroutine begins running synchronously as part of this
-/// call, up to its first suspension. Pass @c intro_type::lazy if you
-/// want the spawn to be queued without running until something else
-/// drives the scheduler.
+/// The returned value is the bare coroutine handle of the **spawn driver**
+/// (already released from any owning task). Because that driver uses
+/// @c exit_then_destroy, you may ignore the handle: the driver destroys
+/// itself at @c final_suspend. The user task is still cleaned up by the
+/// normal await path inside the driver, not by putting
+/// @c exit_then_destroy on the user promise.
+///
+/// The default @p Intro is @c eager: the driver begins running
+/// synchronously as part of this call, up to its first suspension. Pass
+/// @c intro_type::lazy if you want the spawn to be queued without running
+/// until something else drives the scheduler.
 ///
 /// @warning Exceptions thrown by @p task are silently discarded —
 ///          there is no awaiter to receive them. Use a different

@@ -90,11 +90,6 @@ namespace promises
 	{
 		using self_type = with_scheduler;
 		using scheduler_type = Scheduler;
-		struct env_type
-		{
-			constexpr auto query(::stdexec::get_scheduler_t) const noexcept { return _self->_scheduler; }
-			self_type const* _self;
-		};
 
 		constexpr explicit(false) with_scheduler()
 			noexcept(::std::is_nothrow_default_constructible_v<scheduler_type>)
@@ -112,9 +107,10 @@ namespace promises
 			requires ::std::constructible_from<scheduler_type, decltype(::stdexec::get_scheduler(env))>
 			: _scheduler(::stdexec::get_scheduler(env))
 		{}
-
-
-		constexpr auto get_env() const noexcept { return env_type{ this }; }
+		constexpr auto get_env() const noexcept
+		{
+			return ::stdexec::prop{ ::stdexec::get_scheduler, _scheduler };
+		}
 		constexpr void set_scheduler(auto&& sched)
 			requires ::std::assignable_from<scheduler_type&, decltype(sched)>
 		{
@@ -136,24 +132,18 @@ namespace promises
 	{
 		using self_type = with_scheduler;
 		using scheduler_type = Scheduler;
-		struct env_type
-		{
-			constexpr auto query(::stdexec::get_scheduler_t) const noexcept { return _self->_scheduler.value(); }
-			self_type const* _self;
-		};
 
 		constexpr explicit(false) with_scheduler() noexcept = default;
-
 		constexpr explicit(false) with_scheduler(auto&&...) : with_scheduler() {}
-
 		constexpr explicit(false) with_scheduler(auto const& env, auto&&...)
 			noexcept(::std::is_nothrow_constructible_v<::std::optional<scheduler_type>, decltype(::stdexec::get_scheduler(env))>)
 			requires ::std::constructible_from<::std::optional<scheduler_type>, decltype(::stdexec::get_scheduler(env))>
 			: _scheduler(::stdexec::get_scheduler(env))
 		{}
-
-
-		constexpr auto get_env() const noexcept { return env_type{ this }; }
+		constexpr auto get_env() const noexcept
+		{
+			return ::stdexec::prop{ ::stdexec::get_scheduler, *_scheduler };
+		}
 		constexpr void set_scheduler(auto&& sched)
 			requires requires(::std::optional<scheduler_type> s){ s.emplace(::std::forward<decltype(sched)>(sched)); }
 		{

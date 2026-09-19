@@ -111,7 +111,7 @@ namespace promises
 			return awaitable{ _continuation };
 		}
 
-		constexpr auto set_continuation(coroutine_handle auto continuation) noexcept
+		constexpr void set_continuation(coroutine_handle auto continuation) noexcept
 			requires ::std::assignable_from<handle_type&, decltype(continuation)>
 		{
 			_continuation = continuation;
@@ -120,6 +120,45 @@ namespace promises
 		constexpr auto continuation() const noexcept { return _continuation; }
 
 		handle_type _continuation = ::std::noop_coroutine();
+	};
+
+	template<coroutine_handle Handle = ::std::coroutine_handle<>>
+	struct propagate_stopped_to_continuation : jump_to_continuation<Handle>
+	{
+		using handle_type = Handle;
+		using stop_callback_type = ::std::coroutine_handle<>(*)(void*);
+		using base_type = jump_to_continuation<Handle>;
+
+		template<coroutine_handle CoroHandle>
+		constexpr static ::std::coroutine_handle<> _propagate_stopped(void* handle)
+		{
+			using continuation_type = CoroHandle;
+			auto typed_coroutine = continuation_type::from_address(handle);
+			if constexpr (
+				promise_coroutine_handle<continuation_type>
+				&& requires{ { typed_coroutine.promise().unhandled_stopped() } -> ::std::convertible_to<::std::coroutine_handle<>>; }
+				)
+			{
+				return typed_coroutine.promise().unhandled_stopped();
+			}
+			else
+			{
+				::std::terminate();
+			}
+		}
+
+		constexpr void set_continuation(coroutine_handle auto continuation) noexcept
+			requires requires { base_type::set_continuation(continuation); }
+		{
+			base_type::set_continuation(continuation);
+			_callback = _propagate_stopped<decltype(continuation)>;
+		}
+		constexpr auto unhandled_stopped() const noexcept
+		{
+			return _callback(base_type::continuation().address());
+		}
+
+		stop_callback_type _callback = +[](void*) noexcept -> ::std::coroutine_handle<> { ::std::terminate(); };
 	};
 }
 

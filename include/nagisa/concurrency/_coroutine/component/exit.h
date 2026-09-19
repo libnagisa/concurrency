@@ -42,11 +42,28 @@ namespace promises
 	{
 		constexpr static auto final_suspend() noexcept { return ::std::suspend_always{}; }
 	};
+
 	/// @brief Promise mixin: @c final_suspend destroys the coroutine frame.
 	///
-	/// "Fire-and-forget" termination — the frame is gone the moment the
-	/// coroutine body finishes. Used by @c spawn_promise so that detached
-	/// tasks clean up after themselves with no owner to call @c destroy().
+	/// Use this only for **detached / fire-and-forget** coroutines that own
+	/// their frame exclusively. Once the body finishes, @c final_suspend
+	/// destroys the frame immediately; there must be no outer awaiter /
+	/// opstate that still expects to call @c await_resume or @c destroy().
+	///
+	/// Correct:
+	/// - Internal driver promises such as @c spawn_promise.
+	/// - Other self-owned detached coroutines whose handle is released and
+	///   never observed again.
+	///
+	/// Incorrect:
+	/// - Ordinary tasks meant to be @c co_await'ed or connected as senders.
+	/// - Promises paired with @c awaitable_traits::destroy_after_resumed
+	///   (that combination double-frees).
+	/// - Any protocol that still needs the frame after completion to deliver
+	///   a value/exception, resume a parent, or run sticky/affinity logic.
+	///
+	/// Note: @c spawn uses this on its **internal driver** promise, not as a
+	/// general rule for every user task that happens to be spawned.
 	struct exit_then_destroy
 	{
 		constexpr static auto final_suspend() noexcept

@@ -33,6 +33,9 @@ namespace coroutine_detail
 template<class T>
 concept coroutine_handle = requires(T t) { coroutine_detail::is_derived_from_std_coroutine_handle(t); };
 
+template<class T>
+concept promise_coroutine_handle = coroutine_handle<T> && requires(T t) { { t.promise() }; };
+
 /// @brief Reinterprets a coroutine handle as a different specialization
 ///        without touching the underlying coroutine state.
 ///

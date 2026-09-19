@@ -33,6 +33,7 @@
 #include "./_coroutine/component/continuation.h"
 #include "./_coroutine/component/exit.h"
 #include "./_coroutine/component/custom.h"
+#include "./_coroutine/component/stop.h"
 #include "./_coroutine/component/stop_token.h"
 #include "./_coroutine/component/workflow.h"
 #include "./_coroutine/component/with_awaitable.h"

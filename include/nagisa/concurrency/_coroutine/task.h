@@ -146,9 +146,15 @@ public:
 	///
 	/// After the call, the task is empty and its destructor is a no-op;
 	/// the caller takes full responsibility for eventually destroying
-	/// the coroutine (typically by resuming it to completion under a
-	/// promise that self-destructs on @c final_suspend, see
-	/// @c promises::exit_then_destroy).
+	/// the coroutine. Two common patterns:
+	/// - keep the handle and call @c destroy() yourself; or
+	/// - resume a **detached** coroutine whose promise uses
+	///   @c promises::exit_then_destroy so the frame self-destructs at
+	///   @c final_suspend.
+	///
+	/// Do not use @c exit_then_destroy for ordinary awaitable/sender tasks;
+	/// those usually keep @c default_exit and let the awaiter /
+	/// @c destroy_after_resumed free the frame after @c await_resume.
 	constexpr auto release() noexcept { return ::std::exchange(base_type::_coroutine, nullptr); }
 };
 

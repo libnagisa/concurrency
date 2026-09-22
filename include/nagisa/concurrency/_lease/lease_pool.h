@@ -205,7 +205,10 @@ public:
 	{
 		auto token = ::std::move(_available_container.back());
 		if constexpr (noexcept(_available_container.pop_back()))
+		{
+			_available_container.pop_back();
 			return token;
+		}
 		else
 		{
 			try

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "./manual_lifetime.h"
 #include "./completion_kind.h"
 
 #include "./environment.h"

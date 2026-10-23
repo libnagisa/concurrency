@@ -21,5 +21,6 @@
 #include <stdexec/execution.hpp>
 
 #include <nagisa/concurrency/_forward_stop_token.h>
+#include <nagisa/concurrency/_manual_lifetime.h>
 
 #include <nagisa/concurrency/environment.h>

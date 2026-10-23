@@ -23,20 +23,9 @@ TEST_CASE("unique_ptr tokens keep the pointed-to object across lease cycles")
 		*a->token() += 5;
 	}
 
-	CHECK(pool.available() == 2);
+	check_available(pool, 2);
 	auto b = pool.try_acquire();
 	REQUIRE(b);
 	REQUIRE(b->token());
 	CHECK((*b->token() == 10 || *b->token() == 25));
-}
-
-TEST_CASE("supply a unique_ptr into an empty pool")
-{
-	ptr_pool pool{};
-	pool.supply(::std::make_unique<int>(42));
-	CHECK(pool.size() == 1);
-	auto lease = pool.try_acquire();
-	REQUIRE(lease);
-	REQUIRE(lease->token());
-	CHECK(*lease->token() == 42);
 }

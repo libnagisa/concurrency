@@ -26,13 +26,13 @@ struct capture
 
 auto main() -> int
 {
-	int_pool pool{};
+	int_pool pool{::std::vector<int>{77}};
+	auto held = pool.try_acquire();
 	::std::optional<int_lease> got{};
 	auto op = ::stdexec::connect(pool.acquire(), capture{&got});
 	::stdexec::start(op);
-	::std::cout << "waiting, available=" << pool.available() << '\n';
+	::std::cout << "waiting, completed=" << got.has_value() << '\n';
 
-	pool.supply(77);
-	::std::cout << "supply woke waiter, token=" << got->token()
-		<< " available=" << pool.available() << '\n';
+	held.reset();
+	::std::cout << "release woke waiter, token=" << got->token() << '\n';
 }

@@ -6,7 +6,7 @@ TEST_CASE("co_await acquire suspends until a lease is released")
 {
 	int_pool pool{::std::vector<int>{42}};
 	auto held = pool.try_acquire();
-	CHECK(pool.available() == 0);
+	check_available(pool, 0);
 
 	auto take = [&pool]() -> await_task<int> {
 		auto lease = co_await pool.acquire();
@@ -19,5 +19,5 @@ TEST_CASE("co_await acquire suspends until a lease is released")
 	held.reset();
 	REQUIRE(task.done());
 	CHECK(task.take() == 42);
-	CHECK(pool.available() == 1);
+	check_available(pool, 1);
 }

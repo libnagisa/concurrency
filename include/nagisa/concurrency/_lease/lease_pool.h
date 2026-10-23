@@ -37,11 +37,13 @@ public:
 		constexpr lease(self_type& pool, token_type token) noexcept
 			: _pool(::std::addressof(pool))
 			, _token(::std::move(token))
-		{}
+		{
+		}
 		constexpr lease(lease&& other) noexcept
 			: _pool(::std::exchange(other._pool, nullptr))
 			, _token(::std::exchange(other._token, token_type{}))
-		{}
+		{
+		}
 		constexpr lease& operator=(lease&& other) noexcept
 		{
 			auto discarded = ::std::move(*this);
@@ -122,8 +124,8 @@ public:
 			}
 			constexpr operation(operation&&) = delete;
 			constexpr operation(operation const&) = delete;
-			constexpr operation& operator=(operation const&)  = delete;
-			constexpr operation& operator=(operation&&)  = delete;
+			constexpr operation& operator=(operation const&) = delete;
+			constexpr operation& operator=(operation&&) = delete;
 			constexpr void start() & noexcept
 			{
 				if (auto token = _pool->_take_or_enqueue(*this))
@@ -149,23 +151,22 @@ public:
 	available_container_type _available_container{};
 	waiter_type* _head = nullptr;
 	waiter_type* _tail = nullptr;
-	::std::size_t _supplied = 0;
 
 	constexpr lease_pool() noexcept requires ::std::default_initializable<available_container_type> = default;
 	explicit constexpr lease_pool(available_container_type&& container) noexcept
 		: _available_container(::std::move(container))
-		, _supplied(_available_container.size())
-	{}
-	explicit constexpr lease_pool(available_container_type const& container) noexcept 
+	{
+	}
+	explicit constexpr lease_pool(available_container_type const& container) noexcept
 		requires ::std::copy_constructible<available_container_type>
 		: _available_container(container)
-		, _supplied(container.size()) 
-	{}
+	{
+	}
 	constexpr explicit lease_pool(::std::in_place_t, auto&&... args) noexcept
 		requires ::std::constructible_from<available_container_type, decltype(args)...>
 		: _available_container(::std::forward<decltype(args)>(args)...)
-		, _supplied(_available_container.size()) 
-	{}
+	{
+	}
 
 	constexpr lease_pool(self_type&&) noexcept = delete;
 	constexpr lease_pool(self_type const&) noexcept = delete;
@@ -175,35 +176,18 @@ public:
 	constexpr ~lease_pool() noexcept
 	{
 		NAGISA_CONCURRENCY_LEASE_ASSERT(_head == nullptr);
-		NAGISA_CONCURRENCY_LEASE_ASSERT(_available_container.size() == _supplied);
 	}
 	[[nodiscard]] constexpr acquire_sender acquire() noexcept { return acquire_sender{ this }; }
 	[[nodiscard]] ::std::optional<lease> try_acquire()
 	{
 		auto guard = ::std::scoped_lock{ _mutex };
-		if (_available_container.empty())
+		if (::std::ranges::empty(_available_container))
 			return ::std::nullopt;
-		return ::std::optional<lease>{::std::in_place, *this, self_type::_extract_available()};
-	}
-	[[nodiscard]] auto size() const
-	{
-		auto guard = ::std::scoped_lock{ _mutex };
-		return _supplied;
-	}
-	[[nodiscard]] auto available() const
-	{
-		auto guard = ::std::scoped_lock{ _mutex };
-		return _available_container.size();
-	}
-	void supply(Token value)
-	{
-		self_type::_put(::std::move(value));
-		auto guard = ::std::scoped_lock{ _mutex };
-		++_supplied;
+		return ::std::optional<lease>{::std::in_place, * this, self_type::_extract_available()};
 	}
 	[[nodiscard]] token_type _extract_available()
 	{
-		auto token = ::std::move(_available_container.back());
+		token_type token = ::std::move(_available_container.back());
 		if constexpr (noexcept(_available_container.pop_back()))
 		{
 			_available_container.pop_back();
@@ -226,7 +210,7 @@ public:
 	[[nodiscard]] ::std::optional<token_type> _take_or_enqueue(waiter_type& target)
 	{
 		auto guard = ::std::scoped_lock{ _mutex };
-		if (!_available_container.empty())
+		if (!::std::ranges::empty(_available_container))
 			return self_type::_extract_available();
 		target._next = nullptr;
 		if (_tail == nullptr)

@@ -4,7 +4,11 @@
 
 TEST_CASE("waiting acquires are served FIFO")
 {
-	int_pool pool{};
+	int_pool pool{::std::vector<int>{2, 1}};
+	auto held_first = pool.try_acquire();
+	auto held_second = pool.try_acquire();
+	REQUIRE(held_first);
+	REQUIRE(held_second);
 	::std::optional<int_lease> first{};
 	::std::optional<int_lease> second{};
 	auto s1 = completion::pending;
@@ -18,16 +22,16 @@ TEST_CASE("waiting acquires are served FIFO")
 	CHECK(s2 == completion::pending);
 	CHECK_FALSE(pool.try_acquire());
 
-	pool.supply(1);
+	held_first.reset();
 	CHECK(s1 == completion::value);
 	CHECK(s2 == completion::pending);
 	REQUIRE(first);
 	CHECK(first->token() == 1);
 
-	pool.supply(2);
+	held_second.reset();
 	CHECK(s2 == completion::value);
 	REQUIRE(second);
 	CHECK(second->token() == 2);
-	CHECK(pool.available() == 0);
-	CHECK(pool.size() == 2);
+	check_available(pool, 0);
+
 }

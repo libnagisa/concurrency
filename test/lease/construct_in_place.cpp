@@ -5,8 +5,8 @@
 TEST_CASE("construct pool in_place with container arguments")
 {
 	int_pool pool{::std::in_place, 2, 42};
-	CHECK(pool.size() == 2);
-	CHECK(pool.available() == 2);
+
+	check_available(pool, 2);
 	auto a = pool.try_acquire();
 	auto b = pool.try_acquire();
 	REQUIRE(a);

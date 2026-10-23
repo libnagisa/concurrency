@@ -9,5 +9,5 @@ TEST_CASE("then consumes the lease and returns the token")
 		| ::stdexec::then([](int_lease lease) noexcept { return lease.token(); });
 	auto [value] = ::stdexec::sync_wait(::std::move(snd)).value();
 	CHECK(value == 8);
-	CHECK(pool.available() == 1);
+	check_available(pool, 1);
 }

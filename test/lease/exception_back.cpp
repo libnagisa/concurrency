@@ -9,8 +9,8 @@ TEST_CASE("back() throw does not consume a token")
 	ctrl.on_back = true;
 	CHECK_THROWS_AS((void)pool.try_acquire(), container_boom);
 	CHECK_FALSE(ctrl.on_back);
-	CHECK(pool.size() == 3);
-	CHECK(pool.available() == 3);
+
+	check_available(pool, 3);
 	auto a = pool.try_acquire();
 	REQUIRE(a);
 	CHECK(a->token() == 3);

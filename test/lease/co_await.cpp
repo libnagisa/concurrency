@@ -13,5 +13,5 @@ TEST_CASE("co_await acquire when a token is available")
 	task.resume();
 	REQUIRE(task.done());
 	CHECK(task.take() == 14);
-	CHECK(pool.available() == 2);
+	check_available(pool, 2);
 }

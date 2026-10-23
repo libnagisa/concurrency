@@ -7,10 +7,10 @@ TEST_CASE("let_value holds the lease for nested work")
 	int_pool pool{::std::vector<int>{9}};
 	auto snd = pool.acquire()
 		| ::stdexec::let_value([&pool](int_lease const& lease) noexcept {
-			CHECK(pool.available() == 0);
+			check_available(pool, 0);
 			return ::stdexec::just(lease.token());
 		});
 	auto [value] = ::stdexec::sync_wait(::std::move(snd)).value();
 	CHECK(value == 9);
-	CHECK(pool.available() == 1);
+	check_available(pool, 1);
 }

@@ -4,10 +4,12 @@
 
 TEST_CASE("when_all with just_stopped unlinks a waiting acquire")
 {
-	int_pool pool{};
+	int_pool pool{::std::vector<int>{1}};
+	auto held = pool.try_acquire();
+	REQUIRE(held);
 	auto snd = ::stdexec::when_all(pool.acquire(), ::stdexec::just_stopped())
 		| ::stdexec::let_stopped([] { return ::stdexec::just(); });
 	::stdexec::sync_wait(::std::move(snd));
-	pool.supply(1);
-	CHECK(pool.available() == 1);
+	held.reset();
+	check_available(pool, 1);
 }

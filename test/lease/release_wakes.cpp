@@ -6,7 +6,7 @@ TEST_CASE("destroying a lease wakes a waiter")
 {
 	int_pool pool{::std::vector<int>{3}};
 	auto held = pool.try_acquire();
-	CHECK(pool.available() == 0);
+	check_available(pool, 0);
 
 	::std::optional<int_lease> got{};
 	auto done = completion::pending;

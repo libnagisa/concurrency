@@ -14,12 +14,12 @@ TEST_CASE("moving a lease transfers ownership")
 	int_pool pool{::std::vector<int>{1, 2}};
 	auto a = pool.try_acquire();
 	REQUIRE(a);
-	CHECK(pool.available() == 1);
+	check_available(pool, 1);
 	auto b = ::std::move(*a);
 	CHECK_FALSE(*a);
 	CHECK(b);
 	CHECK(b.token() == 2);
-	CHECK(pool.available() == 1);
+	check_available(pool, 1);
 }
 
 TEST_CASE("move-assigning a lease returns the old token")
@@ -30,12 +30,12 @@ TEST_CASE("move-assigning a lease returns the old token")
 	REQUIRE(a);
 	REQUIRE(c);
 	CHECK(c->token() == 1);
-	CHECK(pool.available() == 0);
+	check_available(pool, 0);
 	auto b = ::std::move(*a);
 	b = ::std::move(*c);
 	CHECK_FALSE(*c);
 	CHECK(b.token() == 1);
-	CHECK(pool.available() == 1);
+	check_available(pool, 1);
 }
 
 TEST_CASE("assigning an empty lease returns the token")
@@ -46,5 +46,5 @@ TEST_CASE("assigning an empty lease returns the token")
 	auto b = ::std::move(*a);
 	b = int_lease{};
 	CHECK_FALSE(b);
-	CHECK(pool.available() == 2);
+	check_available(pool, 2);
 }

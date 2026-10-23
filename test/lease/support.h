@@ -89,3 +89,19 @@ struct await_task
 
 using int_pool = ::nc::lease_pool<int, ::std::vector<int>>;
 using int_lease = int_pool::lease;
+
+// Hold all borrowed leases until the exhaustion check, then restore LIFO order.
+template <class Pool>
+void check_available(Pool& pool, ::std::size_t expected)
+{
+	::std::vector<typename Pool::lease> held{};
+	for (::std::size_t index = 0; index < expected; ++index)
+	{
+		auto lease = pool.try_acquire();
+		REQUIRE(lease.has_value());
+		held.push_back(::std::move(*lease));
+	}
+	CHECK_FALSE(pool.try_acquire());
+	while (!held.empty())
+		held.pop_back();
+}

@@ -18,20 +18,20 @@ TEST_CASE("try_acquire and RAII return a move-only token")
 	src.emplace_back(1);
 	src.emplace_back(2);
 	slot_pool pool{::std::move(src)};
-	CHECK(pool.size() == 2);
+
 
 	{
 		auto a = pool.try_acquire();
 		REQUIRE(a);
 		CHECK(a->token().id == 2);
-		CHECK(pool.available() == 1);
+		check_available(pool, 1);
 		auto b = pool.try_acquire();
 		REQUIRE(b);
 		CHECK(b->token().id == 1);
 		CHECK_FALSE(pool.try_acquire());
 	}
 
-	CHECK(pool.available() == 2);
+	check_available(pool, 2);
 	auto again = pool.try_acquire();
 	REQUIRE(again);
 	CHECK((again->token().id == 1 || again->token().id == 2));
@@ -48,7 +48,7 @@ TEST_CASE("moving a lease transfers a move-only token")
 	CHECK_FALSE(*a);
 	CHECK(b);
 	CHECK(b.token().id == 7);
-	CHECK(pool.available() == 0);
+	check_available(pool, 0);
 	b = {};
-	CHECK(pool.available() == 1);
+	check_available(pool, 1);
 }

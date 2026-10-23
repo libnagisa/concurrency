@@ -15,13 +15,11 @@ auto main() -> int
 
 	{
 		auto [lease] = ::stdexec::sync_wait(pool.acquire()).value();
-		::std::cout << "sync_wait got " << lease.token()
-			<< ", available=" << pool.available() << '\n';
+		::std::cout << "sync_wait got " << lease.token() << '\n';
 	}
 
 	auto snd = pool.acquire()
 		| ::stdexec::then([](int_lease lease) noexcept { return lease.token(); });
 	auto [value] = ::stdexec::sync_wait(::std::move(snd)).value();
-	::std::cout << "then got " << value
-		<< ", available=" << pool.available() << '\n';
+	::std::cout << "then got " << value << '\n';
 }

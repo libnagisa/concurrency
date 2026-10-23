@@ -13,7 +13,7 @@ TEST_CASE("custom token type with deque container")
 	static_assert(::nc::lease_token<connection>);
 
 	::nc::lease_pool<connection, ::std::deque<connection>> pool{::std::deque<connection>{{3}, {5}}};
-	CHECK(pool.size() == 2);
+
 	auto lease = pool.try_acquire();
 	REQUIRE(lease);
 	CHECK(lease->token().fd == 5);

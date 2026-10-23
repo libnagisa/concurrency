@@ -1,6 +1,6 @@
 #pragma once
 
-#include <nagisa/concurrency/lease.h>
+#include "support.h"
 
 #include <cstddef>
 #include <stdexcept>
@@ -11,11 +11,9 @@ namespace nc = ::nagisa::concurrency;
 
 struct throw_ctrl
 {
-	bool on_push_back = false;
 	bool on_pop_back = false;
 	bool on_back = false;
 	bool on_empty = false;
-	bool on_size = false;
 };
 
 struct container_boom : ::std::runtime_error
@@ -47,8 +45,6 @@ struct throwing_stack
 
 	void push_back(T&& value)
 	{
-		if (ctrl)
-			fire(ctrl->on_push_back);
 		impl.push_back(::std::move(value));
 	}
 	T& back()
@@ -68,12 +64,6 @@ struct throwing_stack
 		if (ctrl)
 			fire(ctrl->on_empty);
 		return impl.empty();
-	}
-	[[nodiscard]] ::std::size_t size() const
-	{
-		if (ctrl)
-			fire(ctrl->on_size);
-		return impl.size();
 	}
 };
 

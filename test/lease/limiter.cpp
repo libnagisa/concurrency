@@ -8,9 +8,7 @@
 
 TEST_CASE("bounded pool limits concurrent holders")
 {
-	::nc::bounded_lease_pool<int, 2> pool{};
-	pool.supply(0);
-	pool.supply(1);
+	::nc::bounded_lease_pool<int, 2> pool{::std::in_place, ::std::from_range, ::std::vector<int>{0, 1}};
 
 	::std::atomic_int in_flight{0};
 	::std::atomic_int max_flight{0};
@@ -52,6 +50,6 @@ TEST_CASE("bounded pool limits concurrent holders")
 	CHECK(completions.load() == thread_count * per_thread);
 	CHECK(max_flight.load() <= 2);
 	CHECK(in_flight.load() == 0);
-	CHECK(pool.available() == 2);
-	CHECK(pool.size() == 2);
+	check_available(pool, 2);
+
 }

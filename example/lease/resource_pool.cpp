@@ -24,12 +24,10 @@ auto main() -> int
 			::std::cout << "pool empty\n";
 			return 1;
 		}
-		::std::cout << "borrow fd=" << lease->token().fd
-			<< " available=" << pool.available() << '\n';
+		::std::cout << "borrow fd=" << lease->token().fd << '\n';
 		lease->token().fd = 9;
 	}
 
 	auto again = pool.try_acquire();
-	::std::cout << "returned fd=" << again->token().fd
-		<< " available=" << pool.available() << '\n';
+	::std::cout << "returned fd=" << again->token().fd << '\n';
 }

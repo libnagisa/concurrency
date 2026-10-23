@@ -9,8 +9,8 @@ TEST_CASE("pop_back() throw restores the token already moved from back()")
 	ctrl.on_pop_back = true;
 	CHECK_THROWS_AS((void)pool.try_acquire(), container_boom);
 	CHECK_FALSE(ctrl.on_pop_back);
-	CHECK(pool.size() == 3);
-	CHECK(pool.available() == 3);
+
+	check_available(pool, 3);
 
 	auto a = pool.try_acquire();
 	REQUIRE(a);
@@ -32,5 +32,5 @@ TEST_CASE("pop_back() throw then a later try_acquire still works")
 	auto lease = pool.try_acquire();
 	REQUIRE(lease);
 	CHECK(lease->token() == 7);
-	CHECK(pool.available() == 0);
+	check_available(pool, 0);
 }

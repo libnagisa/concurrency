@@ -20,12 +20,10 @@ auto main() -> int
 
 	{
 		auto lease = pool.try_acquire();
-		::std::cout << "borrow *p=" << *lease->token()
-			<< " available=" << pool.available() << '\n';
+		::std::cout << "borrow *p=" << *lease->token() << '\n';
 		*lease->token() += 5;
 	}
 
 	auto [lease] = ::stdexec::sync_wait(pool.acquire()).value();
-	::std::cout << "acquire *p=" << *lease.token()
-		<< " available=" << pool.available() << '\n';
+	::std::cout << "acquire *p=" << *lease.token() << '\n';
 }

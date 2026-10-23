@@ -18,7 +18,7 @@ TEST_CASE("sync_wait acquire delivers a move-only token")
 	REQUIRE(result.has_value());
 	auto lease = ::std::get<0>(::std::move(*result));
 	CHECK(lease.token().id == 22);
-	CHECK(pool.available() == 1);
+	check_available(pool, 1);
 }
 
 TEST_CASE("then moves the move-only lease in and returns it to the pool")
@@ -30,18 +30,22 @@ TEST_CASE("then moves the move-only lease in and returns it to the pool")
 		| ::stdexec::then([](slot_lease lease) noexcept { return lease.token().id; });
 	auto [value] = ::stdexec::sync_wait(::std::move(snd)).value();
 	CHECK(value == 8);
-	CHECK(pool.available() == 1);
+	check_available(pool, 1);
 }
 
-TEST_CASE("supply of a move-only token wakes a waiter")
+TEST_CASE("returning a move-only token wakes a waiter")
 {
-	slot_pool pool{};
+	::std::vector<move_only_slot> src;
+	src.emplace_back(77);
+	slot_pool pool{::std::move(src)};
+	auto held = pool.try_acquire();
+	REQUIRE(held);
 	::std::optional<slot_lease> got{};
 	auto done = completion::pending;
 	auto op = ::stdexec::connect(pool.acquire(), capture_receiver<slot_lease>{&got, &done});
 	::stdexec::start(op);
 	CHECK(done == completion::pending);
-	pool.supply(move_only_slot{77});
+	held.reset();
 	CHECK(done == completion::value);
 	REQUIRE(got);
 	CHECK(got->token().id == 77);

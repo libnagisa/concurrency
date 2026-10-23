@@ -5,10 +5,13 @@
 
 TEST_CASE("bounded_lease_pool holds unique_ptr tokens")
 {
-	::nc::bounded_lease_pool<unique_int, 2> pool{};
-	pool.supply(::std::make_unique<int>(1));
-	pool.supply(::std::make_unique<int>(2));
-	CHECK(pool.size() == 2);
+	::std::vector<unique_int> src;
+	src.push_back(::std::make_unique<int>(1));
+	src.push_back(::std::make_unique<int>(2));
+	::nc::bounded_lease_pool<unique_int, 2> pool{
+		::std::in_place, ::std::from_range, src | ::std::views::as_rvalue
+	};
+
 	auto a = pool.try_acquire();
 	auto b = pool.try_acquire();
 	REQUIRE(a);
@@ -17,7 +20,7 @@ TEST_CASE("bounded_lease_pool holds unique_ptr tokens")
 	REQUIRE(b->token());
 	CHECK_FALSE(pool.try_acquire());
 	a.reset();
-	CHECK(pool.available() == 1);
+	check_available(pool, 1);
 	auto c = pool.try_acquire();
 	REQUIRE(c);
 	REQUIRE(c->token());

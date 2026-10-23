@@ -5,7 +5,7 @@
 TEST_CASE("empty pool has no tokens")
 {
 	int_pool pool{};
-	CHECK(pool.size() == 0);
-	CHECK(pool.available() == 0);
+
+	check_available(pool, 0);
 	CHECK_FALSE(pool.try_acquire());
 }

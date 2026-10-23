@@ -11,5 +11,5 @@ TEST_CASE("sync_wait acquire when a token is already available")
 	REQUIRE(result.has_value());
 	auto lease = ::std::get<0>(::std::move(*result));
 	CHECK(lease.token() == 22);
-	CHECK(pool.available() == 1);
+	check_available(pool, 1);
 }

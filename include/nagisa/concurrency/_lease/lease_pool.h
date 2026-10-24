@@ -16,6 +16,18 @@ struct waiter
 
 	waiter* _next = nullptr;
 	void (*_complete)(waiter*, token_type) noexcept = nullptr;
+	// 下面两个字段仅在持有 lease_pool::_mutex 时读写，用来仲裁
+	// "入队前就已经被取消" 这一条路径，不参与 _put 摘节点之后的任何决策
+	// （那条路径上节点可能已经失效，不能再碰）。
+	bool _enqueued = false;
+	bool _cancelled_before_enqueue = false;
+};
+
+enum class lease_acquire_result
+{
+	acquired,
+	queued,
+	cancelled,
 };
 
 template <lease_token Token, available_container<Token> AvailableContainer>
@@ -27,6 +39,12 @@ public:
 	using token_type = Token;
 	using available_container_type = AvailableContainer;
 	using waiter_type = waiter<token_type>;
+
+	struct acquire_attempt
+	{
+		lease_acquire_result result;
+		::std::optional<token_type> token{};
+	};
 
 	struct lease
 	{
@@ -85,7 +103,7 @@ public:
 				operation* _operation;
 				constexpr auto operator()() const noexcept -> void
 				{
-					if (!_operation->_pool->_unlink(_operation))
+					if (!_operation->_pool->_cancel(*_operation))
 						return;
 					// 从回调内部销毁这个回调本身是允许的（`__removed_during_callback_`），
 					// upstream 的 `when_all` 也是这么干的。
@@ -128,15 +146,28 @@ public:
 			constexpr operation& operator=(operation&&) = delete;
 			constexpr void start() & noexcept
 			{
-				if (auto token = _pool->_take_or_enqueue(*this))
-				{
-					::stdexec::set_value(::std::move(_receiver), lease{ *_pool, ::std::move(*token) });
-					return;
-				}
-				// 排上队了。装取消回调——装的过程里回调就可能立刻跑（令牌已停止），
-				// 那条路会把自己摘掉并完成，所以之后不能再碰 *this。
+				// 先在节点还是线程私有状态时订阅取消——这一步可能同步重入
+				// on_stop（令牌已经请求停止）。节点此刻还没发布给任何人，
+				// on_stop 只能把结果记在 _cancelled_before_enqueue 上，不会和
+				// _put 竞争同一个节点。
 				if constexpr (_uses_stop_callback)
 					_on_stop.emplace(::stdexec::get_stop_token(::stdexec::get_env(_receiver)), on_stop{ this });
+				// 从这里开始才可能被其它线程看到；入队、提前取消、立即可用
+				// 这三种结果在同一次加锁里仲裁完，start() 之后不会再碰 *this。
+				auto attempt = _pool->_acquire_or_enqueue(*this);
+				switch (attempt.result)
+				{
+				case lease_acquire_result::acquired:
+					::stdexec::set_value(::std::move(_receiver), lease{ *_pool, ::std::move(*attempt.token) });
+					return;
+				case lease_acquire_result::queued:
+					return;
+				case lease_acquire_result::cancelled:
+					if constexpr (_uses_stop_callback)
+						_on_stop.reset();
+					::stdexec::set_stopped(::std::move(_receiver));
+					return;
+				}
 			}
 		};
 
@@ -206,18 +237,30 @@ public:
 			return token;
 		}
 	}
-	[[nodiscard]] ::std::optional<token_type> _take_or_enqueue(waiter_type& target)
+	[[nodiscard]] acquire_attempt _acquire_or_enqueue(waiter_type& target)
 	{
 		auto guard = ::std::scoped_lock{ _mutex };
+		if (target._cancelled_before_enqueue)
+			return acquire_attempt{ lease_acquire_result::cancelled };
 		if (!::std::ranges::empty(_available_container))
-			return self_type::_extract_available();
+			return acquire_attempt{ lease_acquire_result::acquired, self_type::_extract_available() };
 		_waiters.push_back(target);
-		return ::std::nullopt;
+		target._enqueued = true;
+		return acquire_attempt{ lease_acquire_result::queued };
 	}
-	[[nodiscard]] bool _unlink(waiter_type* target)
+	// 返回 true 表示这次调用赢得了完成该节点的权利（调用方应 set_stopped）。
+	// 节点还没入队（start() 还没调用 _acquire_or_enqueue）时，不能去碰它在
+	// 等待队列里的链接——只记下"已取消"，真正的完成交给 _acquire_or_enqueue
+	// 在同一把锁里自己发现并处理。
+	[[nodiscard]] bool _cancel(waiter_type& target)
 	{
 		auto guard = ::std::scoped_lock{ _mutex };
-		return _waiters.unlink(target);
+		if (!target._enqueued)
+		{
+			target._cancelled_before_enqueue = true;
+			return false;
+		}
+		return _waiters.unlink(&target);
 	}
 	void _put(token_type token)
 	{

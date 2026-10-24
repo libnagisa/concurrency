@@ -8,8 +8,8 @@
 ///   和 @c binary_semaphore（= basic_semaphore<1>）都是它的别名，不是独立实现。
 /// - 语义对齐 std::counting_semaphore：acquire/release 手动配对，不自动归还，
 ///   不携带任何值——可用量只是一个计数器，没有容器、没有 token 搬运。需要
-///   "租借一个具体资源对象并在作用域结束时自动归还" 的场景用 lease.h 的
-///   lease_pool，不要用 semaphore 硬凑。
+///   "租借一个具体资源对象并在作用域结束时自动归还" 的场景用同一个头文件里的
+///   @c resource_pool，不要用 semaphore 硬凑。
 /// - 用法：
 ///     nc::counting_semaphore<4> sem{2};      // 初始 2 个许可，上限 4
 ///     if (sem.try_acquire()) { ... sem.release(); }
@@ -25,6 +25,15 @@
 ///   的事件通知式用法——这些用法没有自然的持有者对象可以挂 RAII，需要它们就
 ///   用 basic_semaphore 本身。
 ///
+/// - @c resource_pool<Token, Container> 是带资源的 semaphore：许可就是容器里的
+///   某个 token。acquire()/try_acquire() 得到一个 @c permit，持有 token，析构时
+///   自动归还；归还时若有等待者，token 不经过容器，直接交给队首。
+///   @c bounded_resource_pool<Token, N> 是容量固定的版本。
+///
+/// 实现上 basic_semaphore 和 resource_pool 共用 @c acquire_core（一把锁、一条
+/// 等待队列、同一套"订阅取消 -> 加锁仲裁 -> 完成"状态机），只是 Store 不同：
+/// 计数器不带值，容器带 token。两者各自实例化，没有为对方付出任何运行期开销。
+///
 /// 已知限制（爆栈风险）：@c release() 唤醒排队中的等待者时，是在调用
 /// @c release() 的那个线程、那个栈帧上，同步、直接调用等待者的完成函数
 /// （@c set_value / @c set_stopped）。如果完成之后的延续代码又同步调用
@@ -38,24 +47,27 @@
 /// @c acquire()（享受协程 @c resume() 的标准尾调用保证），或者自己在
 /// 唤醒链路上插入调度器做显式的异步转移。
 
-#include "./_semaphore/wait_queue.h"
 #include "./_semaphore/basic_semaphore.h"
 #include "./_semaphore/counting_semaphore.h"
 #include "./_semaphore/binary_semaphore.h"
 #include "./_semaphore/semaphore_guard.h"
+#include "./_semaphore/resource_pool.h"
 
 
 #include "./environment.h"
 
 NAGISA_BUILD_LIB_BEGIN
 
-using details::wait_queue;
 using details::basic_semaphore;
 using details::counting_semaphore;
 using details::binary_semaphore;
 using details::basic_semaphore_guard;
 using details::counting_semaphore_guard;
 using details::binary_semaphore_guard;
+using details::resource_token;
+using details::resource_pool;
+using details::bounded_stack;
+using details::bounded_resource_pool;
 
 NAGISA_BUILD_LIB_END
 

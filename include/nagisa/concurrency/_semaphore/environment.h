@@ -8,6 +8,10 @@
 #include <utility>
 #include <mutex>
 #include <optional>
+#include <memory>
+#include <array>
+#include <ranges>
+#include <cassert>
 
 #if !__has_include(<stdexec/execution.hpp>)
 #	error "the nagisa.concurrency library requires a C++20 compiler with support for the stdexec library"

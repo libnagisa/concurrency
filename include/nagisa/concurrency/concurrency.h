@@ -11,5 +11,6 @@
 
 #include <nagisa/concurrency/coroutine.h>
 #include <nagisa/concurrency/simple_task.h>
+#include <nagisa/concurrency/semaphore.h>
 #include <nagisa/concurrency/lease.h>
 #include <nagisa/concurrency/when_all_range.h>

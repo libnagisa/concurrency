@@ -20,5 +20,6 @@
 #include <stdexec/execution.hpp>
 
 #include <nagisa/concurrency/_forward_stop_token.h>
+#include <nagisa/concurrency/semaphore.h>
 
 #include <nagisa/concurrency/environment.h>

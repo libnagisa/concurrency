@@ -149,8 +149,7 @@ public:
 
 	mutable ::std::mutex _mutex{};
 	available_container_type _available_container{};
-	waiter_type* _head = nullptr;
-	waiter_type* _tail = nullptr;
+	wait_queue<waiter_type> _waiters{};
 
 	constexpr lease_pool() noexcept requires ::std::default_initializable<available_container_type> = default;
 	explicit constexpr lease_pool(available_container_type&& container) noexcept
@@ -175,7 +174,7 @@ public:
 
 	constexpr ~lease_pool() noexcept
 	{
-		NAGISA_CONCURRENCY_LEASE_ASSERT(_head == nullptr);
+		NAGISA_CONCURRENCY_LEASE_ASSERT(_waiters.empty());
 	}
 	[[nodiscard]] constexpr acquire_sender acquire() noexcept { return acquire_sender{ this }; }
 	[[nodiscard]] ::std::optional<lease> try_acquire()
@@ -212,47 +211,25 @@ public:
 		auto guard = ::std::scoped_lock{ _mutex };
 		if (!::std::ranges::empty(_available_container))
 			return self_type::_extract_available();
-		target._next = nullptr;
-		if (_tail == nullptr)
-			_head = &target;
-		else
-			_tail->_next = &target;
-		_tail = &target;
+		_waiters.push_back(target);
 		return ::std::nullopt;
 	}
 	[[nodiscard]] bool _unlink(waiter_type* target)
 	{
 		auto guard = ::std::scoped_lock{ _mutex };
-		auto link = &_head;
-		auto previous = static_cast<waiter_type*>(nullptr);
-		while (*link != nullptr)
-		{
-			if (*link == target)
-			{
-				*link = target->_next;
-				if (_tail == target)
-					_tail = previous;
-				return true;
-			}
-			previous = *link;
-			link = &(*link)->_next;
-		}
-		return false;
+		return _waiters.unlink(target);
 	}
 	void _put(token_type token)
 	{
 		auto next = static_cast<waiter_type*>(nullptr);
 		{
 			auto guard = ::std::scoped_lock{ _mutex };
-			if (_head == nullptr)
+			next = _waiters.pop_front();
+			if (next == nullptr)
 			{
 				_available_container.push_back(::std::move(token));
 				return;
 			}
-			next = _head;
-			_head = next->_next;
-			if (_head == nullptr)
-				_tail = nullptr;
 		}
 		next->_complete(next, ::std::move(token));
 	}

@@ -11,6 +11,18 @@ struct semaphore_waiter
 {
 	semaphore_waiter* _next = nullptr;
 	void (*_complete)(semaphore_waiter*) noexcept = nullptr;
+	// 下面两个字段仅在持有 basic_semaphore::_mutex 时读写，用来仲裁
+	// "入队前就已经被取消" 这一条路径，不参与 _release 摘节点之后的任何决策
+	// （那条路径上节点可能已经失效，不能再碰）。
+	bool _enqueued = false;
+	bool _cancelled_before_enqueue = false;
+};
+
+enum class acquire_result
+{
+	acquired,
+	queued,
+	cancelled,
 };
 
 template <::std::ptrdiff_t Max = (::std::numeric_limits<::std::ptrdiff_t>::max)()>
@@ -42,7 +54,7 @@ public:
 				operation* _operation;
 				constexpr auto operator()() const noexcept -> void
 				{
-					if (!_operation->_semaphore->_unlink(_operation))
+					if (!_operation->_semaphore->_cancel(*_operation))
 						return;
 					_operation->_on_stop.reset();
 					::stdexec::set_stopped(::std::move(_operation->_receiver));
@@ -79,13 +91,27 @@ public:
 			constexpr operation& operator=(operation&&) = delete;
 			constexpr void start() & noexcept
 			{
-				if (_semaphore->_acquire_or_enqueue(*this))
-				{
-					::stdexec::set_value(::std::move(_receiver));
-					return;
-				}
+				// 先在节点还是线程私有状态时订阅取消——这一步可能同步重入
+				// on_stop（token 已经请求停止）。节点此刻还没发布给任何人，
+				// on_stop 只能把结果记在 _cancelled_before_enqueue 上，不会和
+				// _release 竞争同一个节点。
 				if constexpr (_uses_stop_callback)
 					_on_stop.emplace(::stdexec::get_stop_token(::stdexec::get_env(_receiver)), on_stop{ this });
+				// 从这里开始才可能被其它线程看到；入队、提前取消、立即可用
+				// 这三种结果在同一次加锁里仲裁完，start() 之后不会再碰 *this。
+				switch (_semaphore->_acquire_or_enqueue(*this))
+				{
+				case acquire_result::acquired:
+					::stdexec::set_value(::std::move(_receiver));
+					return;
+				case acquire_result::queued:
+					return;
+				case acquire_result::cancelled:
+					if constexpr (_uses_stop_callback)
+						_on_stop.reset();
+					::stdexec::set_stopped(::std::move(_receiver));
+					return;
+				}
 			}
 		};
 
@@ -129,21 +155,33 @@ public:
 		for (; update != 0; --update)
 			self_type::_release();
 	}
-	[[nodiscard]] bool _acquire_or_enqueue(semaphore_waiter& target) noexcept
+	[[nodiscard]] acquire_result _acquire_or_enqueue(semaphore_waiter& target) noexcept
 	{
 		auto guard = ::std::scoped_lock{ _mutex };
+		if (target._cancelled_before_enqueue)
+			return acquire_result::cancelled;
 		if (_count > 0)
 		{
 			--_count;
-			return true;
+			return acquire_result::acquired;
 		}
 		_waiters.push_back(target);
-		return false;
+		target._enqueued = true;
+		return acquire_result::queued;
 	}
-	[[nodiscard]] bool _unlink(semaphore_waiter* target) noexcept
+	// 返回 true 表示这次调用赢得了完成该节点的权利（调用方应 set_stopped）。
+	// 节点还没入队（start() 还没调用 _acquire_or_enqueue）时，不能去碰它在
+	// 等待队列里的链接——只记下"已取消"，真正的完成交给 _acquire_or_enqueue
+	// 在同一把锁里自己发现并处理。
+	[[nodiscard]] bool _cancel(semaphore_waiter& target) noexcept
 	{
 		auto guard = ::std::scoped_lock{ _mutex };
-		return _waiters.unlink(target);
+		if (!target._enqueued)
+		{
+			target._cancelled_before_enqueue = true;
+			return false;
+		}
+		return _waiters.unlink(&target);
 	}
 	void _release() noexcept
 	{

@@ -16,6 +16,15 @@
 ///     co_await sem.acquire();                // 异步排队等待许可
 ///     sem.release(n);                        // 释放 n 个许可，按 FIFO 唤醒等待者
 ///
+/// - 如果你的 acquire/release 总是一一配对、持有期在一个对象生命周期内就能
+///   表达清楚，用 @c basic_semaphore_guard<Max>（别名 @c counting_semaphore_guard
+///   / @c binary_semaphore_guard）：它内部持有一个 basic_semaphore，acquire()
+///   直接复用 basic_semaphore 的 sender（不重新发明 operation state，只用
+///   stdexec::then 在完成时包一层），拿到的是一个 permit，析构时自动归还。
+///   它不支持 release(n) 批量释放，也不支持"没有对应 acquire 就直接 release"
+///   的事件通知式用法——这些用法没有自然的持有者对象可以挂 RAII，需要它们就
+///   用 basic_semaphore 本身。
+///
 /// 已知限制（爆栈风险）：@c release() 唤醒排队中的等待者时，是在调用
 /// @c release() 的那个线程、那个栈帧上，同步、直接调用等待者的完成函数
 /// （@c set_value / @c set_stopped）。如果完成之后的延续代码又同步调用
@@ -33,6 +42,7 @@
 #include "./_semaphore/basic_semaphore.h"
 #include "./_semaphore/counting_semaphore.h"
 #include "./_semaphore/binary_semaphore.h"
+#include "./_semaphore/semaphore_guard.h"
 
 
 #include "./environment.h"
@@ -43,6 +53,9 @@ using details::wait_queue;
 using details::basic_semaphore;
 using details::counting_semaphore;
 using details::binary_semaphore;
+using details::basic_semaphore_guard;
+using details::counting_semaphore_guard;
+using details::binary_semaphore_guard;
 
 NAGISA_BUILD_LIB_END
 

@@ -107,7 +107,7 @@ struct simple_promise
 	: ::std::conditional_t<Intro == intro_type::eager, promises::eager, promises::lazy>
 	, promises::exception<Throw>
 	, promises::value<Value>
-	, promises::jump_to_continuation<Handle>
+	, promises::propagate_stopped_to_continuation<Handle>
 	, promises::return_object_from_handle<
 		simple_promise<Value, Throw, Scheduler, Intro, StopToken, Handle>
 		, simple_task<Value, Throw, Scheduler, Intro, StopToken, Handle>>
@@ -139,7 +139,7 @@ public:
 	/// @brief Composite env exposing both scheduler and stop_token queries.
 	constexpr auto get_env() const noexcept
 	{
-		return ::stdexec::env(base_sche_type::get_env(), base_st_type::get_env());
+		return ::stdexec::env{ base_sche_type::get_env(), base_st_type::get_env() };
 	}
 };
 

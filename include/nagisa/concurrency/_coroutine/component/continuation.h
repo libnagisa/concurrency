@@ -130,7 +130,7 @@ namespace promises
 		using base_type = jump_to_continuation<Handle>;
 
 		template<coroutine_handle CoroHandle>
-		constexpr static ::std::coroutine_handle<> _propagate_stopped(void* handle)
+		static ::std::coroutine_handle<> _propagate_stopped(void* handle)
 		{
 			using continuation_type = CoroHandle;
 			auto typed_coroutine = continuation_type::from_address(handle);

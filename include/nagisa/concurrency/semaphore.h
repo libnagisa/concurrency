@@ -35,6 +35,12 @@
 ///   自动归还；归还时若有等待者，token 不经过容器，直接交给队首。
 ///   @c bounded_resource_pool<Token, N> 是容量固定的版本。
 ///
+/// @c acquire() 的完成信号随容器而定：容器的 empty()/back()/pop_back() 都是
+/// noexcept 时（vector、deque、bounded_stack）只有 set_value/set_stopped；
+/// 任何一个可能抛，才多出 set_error(exception_ptr)。归还时（permit 析构）
+/// 容器 push_back 抛异常没有地方可以报告，按 terminate 处理；有等待者时 token
+/// 直接交接，不碰容器。
+///
 /// 实现上 basic_semaphore 和 resource_pool 共用 @c acquire_core（一把锁、一条
 /// 等待队列、同一套"订阅取消 -> 加锁仲裁 -> 完成"状态机），只是 Store 不同：
 /// 计数器不带值，容器带 token。两者各自实例化，没有为对方付出任何运行期开销。

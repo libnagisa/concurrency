@@ -24,8 +24,11 @@ struct container_store
 	{
 	}
 
-	[[nodiscard]] constexpr bool available() const { return !::std::ranges::empty(_container); }
-	[[nodiscard]] constexpr Token take()
+	[[nodiscard]] constexpr bool available() const noexcept(noexcept(::std::ranges::empty(_container)))
+	{
+		return !::std::ranges::empty(_container);
+	}
+	[[nodiscard]] constexpr Token take() noexcept(noexcept(::std::move(_container.back())) && noexcept(_container.pop_back()))
 	{
 		Token token = ::std::move(_container.back());
 		if constexpr (noexcept(_container.pop_back()))

@@ -8,6 +8,7 @@
 #include <utility>
 #include <mutex>
 #include <optional>
+#include <exception>
 #include <memory>
 #include <array>
 #include <ranges>

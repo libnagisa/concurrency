@@ -15,7 +15,8 @@ enum class completion
 {
 	pending,
 	value,
-	stopped
+	stopped,
+	error
 };
 
 template <class Permit, class StopToken = ::stdexec::never_stop_token>

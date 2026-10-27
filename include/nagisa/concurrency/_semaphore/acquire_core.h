@@ -65,6 +65,13 @@ struct no_cancel_state {};
 //   give([value])       还一个（value_type 非 void 时带上值）
 // 不带值的 Store 另可提供 give(count)：一次还 count 个。可选，没有就由 give_n
 // 退化成循环调用 give() 手拼（见 give_n.h）。
+//
+// available()/take() 是否 noexcept 决定 acquire() 的完成签名：任何一个可能抛，
+// 才有 set_error(exception_ptr)，并在 start() 里捕获后走 set_error；都不抛则
+// 没有这个签名，也没有 try/catch。抛异常发生在入队之前（take() 要先自己回滚），
+// 所以节点不会留在队列里。
+// give() 抛异常没有地方可以报告（它在 permit 的析构函数里），按 terminate 处理，
+// 所以 Store 的 give() 应当是 noexcept 的；有等待者时值直接交接，根本不碰 Store。
 
 // value_type 为 void（计数器）：acquire() 以 set_value() 完成，没有任何载荷；
 // value_type 非 void（容器）：acquire() 以 set_value(resource_permit) 完成，
@@ -86,6 +93,9 @@ public:
 	using attempt_type = acquire_attempt<value_type>;
 
 	static constexpr bool _has_value = !::std::is_void_v<value_type>;
+	static constexpr bool _acquire_may_throw = !(
+		noexcept(::std::declval<store_type&>().available()) &&
+		noexcept(::std::declval<store_type&>().take()));
 
 	using permit_type = ::std::conditional_t<_has_value, resource_permit<self_type>, counter_permit<self_type>>;
 
@@ -98,7 +108,9 @@ public:
 		static constexpr bool _has_permit = WithPermit;
 		using sender_concept = ::stdexec::sender_t;
 		using completion_signatures = ::std::conditional_t<_has_permit,
-			::stdexec::completion_signatures<::stdexec::set_value_t(permit_type), ::stdexec::set_stopped_t()>,
+			::std::conditional_t<_acquire_may_throw,
+				::stdexec::completion_signatures<::stdexec::set_value_t(permit_type), ::stdexec::set_error_t(::std::exception_ptr), ::stdexec::set_stopped_t()>,
+				::stdexec::completion_signatures<::stdexec::set_value_t(permit_type), ::stdexec::set_stopped_t()>>,
 			::stdexec::completion_signatures<::stdexec::set_value_t(), ::stdexec::set_stopped_t()>>;
 		self_type* _core;
 
@@ -183,7 +195,36 @@ public:
 					_on_stop.emplace(::stdexec::get_stop_token(::stdexec::get_env(_receiver)), on_stop{ this });
 				// 从这里开始才可能被其它线程看到；入队、提前取消、立即可用
 				// 这三种结果在同一次加锁里仲裁完，start() 之后不会再碰 *this。
-				auto attempt = _core->_acquire_or_enqueue(*this, _state);
+				if constexpr (_acquire_may_throw)
+				{
+					// 只包住仲裁这一步：receiver 自己的完成函数抛出来的不归我们捕获，
+					// 否则会在已经完成之后又走一遍 set_error。
+					auto error = ::std::exception_ptr{};
+					auto attempt = attempt_type{ acquire_result::queued };
+					try
+					{
+						attempt = _core->_acquire_or_enqueue(*this, _state);
+					}
+					catch (...)
+					{
+						error = ::std::current_exception();
+					}
+					if (error)
+					{
+						// 抛在入队之前，节点不在队列里；取消回调若同时触发，只会把
+						// _state 记成 cancelled 然后返回 false，不会完成这个节点。
+						if constexpr (_uses_stop_callback)
+							_on_stop.reset();
+						::stdexec::set_error(::std::move(_receiver), ::std::move(error));
+						return;
+					}
+					_finish(::std::move(attempt));
+				}
+				else
+					_finish(_core->_acquire_or_enqueue(*this, _state));
+			}
+			constexpr void _finish(attempt_type&& attempt) noexcept
+			{
 				switch (attempt.result)
 				{
 				case acquire_result::acquired:

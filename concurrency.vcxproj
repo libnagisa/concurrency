@@ -116,6 +116,7 @@
     <ClCompile Include="test\resource_pool\construct_move.cpp" />
     <ClCompile Include="test\resource_pool\custom_token.cpp" />
     <ClCompile Include="test\resource_pool\empty.cpp" />
+    <ClCompile Include="test\resource_pool\error_signature.cpp" />
     <ClCompile Include="test\resource_pool\exception_back.cpp" />
     <ClCompile Include="test\resource_pool\exception_empty.cpp" />
     <ClCompile Include="test\resource_pool\exception_pop_back.cpp" />

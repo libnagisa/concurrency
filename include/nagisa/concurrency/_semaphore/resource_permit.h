@@ -49,4 +49,41 @@ public:
 	[[nodiscard]] constexpr auto&& token() const noexcept { return _token; }
 };
 
+// 不带值的 Store（计数器）的 RAII 凭据：析构时 _release() 一个许可。
+template <class Core>
+struct counter_permit
+{
+private:
+	using self_type = counter_permit;
+public:
+	using core_type = Core;
+
+	core_type* _core = nullptr;
+
+	constexpr counter_permit() = default;
+	constexpr explicit counter_permit(core_type& core) noexcept
+		: _core(::std::addressof(core))
+	{
+	}
+	constexpr counter_permit(self_type&& other) noexcept
+		: _core(::std::exchange(other._core, nullptr))
+	{
+	}
+	constexpr self_type& operator=(self_type&& other) noexcept
+	{
+		auto discarded = ::std::move(*this);
+		_core = ::std::exchange(other._core, nullptr);
+		return *this;
+	}
+	constexpr counter_permit(self_type const&) noexcept = delete;
+	constexpr self_type& operator=(self_type const&) noexcept = delete;
+	constexpr ~counter_permit()
+	{
+		if (_core != nullptr)
+			_core->_release();
+	}
+
+	[[nodiscard]] constexpr explicit operator bool() const noexcept { return _core != nullptr; }
+};
+
 NAGISA_BUILD_LIB_DETAIL_END

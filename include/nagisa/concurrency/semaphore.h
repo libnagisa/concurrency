@@ -3,9 +3,14 @@
 /// @file semaphore.h
 /// @brief 基于 stdexec 的异步/同步 semaphore。
 ///
-/// - @c basic_semaphore<Max> 是核心实现，@c Max 是编译期上限（对齐
-///   std::counting_semaphore 的 LeastMaxValue），@c counting_semaphore<Max>
-///   和 @c binary_semaphore（= basic_semaphore<1>）都是它的别名，不是独立实现。
+/// - @c basic_semaphore<LeastMaxValue, Counter> 是核心实现。@c LeastMaxValue 对齐
+///   std::counting_semaphore：保证至少能容纳这么多个许可，不是精确上限；实际
+///   上限是 @c max()，即 numeric_limits<Counter>::max()（@c Counter 默认
+///   ptrdiff_t）。所以 binary_semaphore 连续 release 两次是合法的，不会失败。
+///   @c counting_semaphore<LeastMaxValue> 和 @c binary_semaphore（= basic_semaphore<1>）
+///   都是它的别名，不是独立实现。
+///   release 超过 max()、构造时 desired 越界、release 传负数是前置条件违反，
+///   debug 下断言，release 构建下没有任何检查开销。
 /// - 语义对齐 std::counting_semaphore：acquire/release 手动配对，不自动归还，
 ///   不携带任何值——可用量只是一个计数器，没有容器、没有 token 搬运。需要
 ///   "租借一个具体资源对象并在作用域结束时自动归还" 的场景用同一个头文件里的
@@ -17,7 +22,7 @@
 ///     sem.release(n);                        // 释放 n 个许可，按 FIFO 唤醒等待者
 ///
 /// - 如果你的 acquire/release 总是一一配对、持有期在一个对象生命周期内就能
-///   表达清楚，用 @c basic_semaphore_guard<Max>（别名 @c counting_semaphore_guard
+///   表达清楚，用 @c basic_semaphore_guard<LeastMaxValue>（别名 @c counting_semaphore_guard
 ///   / @c binary_semaphore_guard）：它内部持有一个 basic_semaphore，acquire()
 ///   直接复用 basic_semaphore 的 sender（不重新发明 operation state，只用
 ///   stdexec::then 在完成时包一层），拿到的是一个 permit，析构时自动归还。

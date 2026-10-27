@@ -2,9 +2,9 @@
 #include <doctest/doctest.h>
 #include "support.h"
 
-static_assert(nc::binary_semaphore::max() == 1);
+static_assert(nc::binary_semaphore::max() >= 1);
 
-TEST_CASE("binary_semaphore allows only one holder at a time")
+TEST_CASE("binary_semaphore allows only one holder at a time when released once per acquire")
 {
 	nc::binary_semaphore sem{1};
 	CHECK(sem.try_acquire());

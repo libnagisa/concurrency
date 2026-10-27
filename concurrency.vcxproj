@@ -24,6 +24,7 @@
     <ClInclude Include="include\nagisa\concurrency\_semaphore\binary_semaphore.h" />
     <ClInclude Include="include\nagisa\concurrency\_semaphore\counting_semaphore.h" />
     <ClInclude Include="include\nagisa\concurrency\_semaphore\environment.h" />
+    <ClInclude Include="include\nagisa\concurrency\_semaphore\give_n.h" />
     <ClInclude Include="include\nagisa\concurrency\_semaphore\macro_pop.h" />
     <ClInclude Include="include\nagisa\concurrency\_semaphore\macro_push.h" />
     <ClInclude Include="include\nagisa\concurrency\_semaphore\resource_permit.h" />
@@ -136,6 +137,10 @@
     <ClCompile Include="test\semaphore\concurrency_stress.cpp" />
     <ClCompile Include="test\semaphore\concurrent_cancel_stress.cpp" />
     <ClCompile Include="test\semaphore\fifo_wakeup.cpp" />
+    <ClCompile Include="test\semaphore\release_many.cpp" />
+    <ClCompile Include="test\semaphore\release_many_cancel.cpp" />
+    <ClCompile Include="test\semaphore\release_many_fast.cpp" />
+    <ClCompile Include="test\semaphore\least_max.cpp" />
     <ClCompile Include="test\semaphore\try_acquire.cpp" />
   </ItemGroup>
   <ItemGroup>

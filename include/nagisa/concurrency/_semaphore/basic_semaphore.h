@@ -57,22 +57,70 @@ struct counter_store
 	}
 };
 
+// acquire_core 的 Store：一个标志位，只能持有 0 或 1 个许可。
+// 手写的二元信号量就是一个 bool：没有计数、没有加法、没有上限比较。
+// 不提供 give(count)，批量版由 give_n 退化成循环调用 give()；
+// 二元信号量里一次最多只有 1 个许可有意义，重复 give 是前置条件违反。
+struct flag_store
+{
+	using value_type = void;
+
+	static constexpr ::std::ptrdiff_t max() noexcept { return 1; }
+
+	bool _free;
+
+	constexpr explicit flag_store(::std::ptrdiff_t desired) noexcept
+		: _free(desired != 0)
+	{
+		NAGISA_CONCURRENCY_SEMAPHORE_ASSERT(desired == 0 || desired == 1);
+	}
+
+	[[nodiscard]] constexpr bool available() const noexcept { return _free; }
+	constexpr void take() noexcept
+	{
+		NAGISA_CONCURRENCY_SEMAPHORE_ASSERT(_free);
+		_free = false;
+	}
+	constexpr void give() noexcept
+	{
+		NAGISA_CONCURRENCY_SEMAPHORE_ASSERT(!_free);
+		_free = true;
+	}
+};
+
+// 默认的存储：LeastMaxValue 为 1 时就是手写二元信号量的样子（一个标志位），
+// 否则是 ptrdiff_t 计数器。显式指定 Counter 则总是用该类型的计数器。
+struct default_counter_t {};
+
+template <::std::ptrdiff_t LeastMaxValue, class Counter>
+consteval auto semaphore_store_for() noexcept
+{
+	if constexpr (!::std::same_as<Counter, default_counter_t>)
+		return ::std::type_identity<counter_store<Counter>>{};
+	else if constexpr (LeastMaxValue == 1)
+		return ::std::type_identity<flag_store>{};
+	else
+		return ::std::type_identity<counter_store<::std::ptrdiff_t>>{};
+}
+
 // LeastMaxValue 对齐 std::counting_semaphore：保证至少能容纳这么多个许可，
-// 不是精确上限。实际上限是 max()，由 Counter 决定。
+// 不是精确上限。实际上限是 max()，由存储决定：LeastMaxValue 为 1 且没有显式
+// 指定 Counter 时是一个标志位（上限恰好 1，重复 release 是前置条件违反）；
+// 否则是 Counter（默认 ptrdiff_t）的上限。
 template <::std::ptrdiff_t LeastMaxValue = (::std::numeric_limits<::std::ptrdiff_t>::max)(),
-	counter_integral Counter = ::std::ptrdiff_t>
+	class Counter = default_counter_t>
 struct basic_semaphore
 {
 private:
 	using self_type = basic_semaphore;
 public:
 	static_assert(LeastMaxValue >= 0);
-	static_assert(::std::cmp_less_equal(LeastMaxValue, (::std::numeric_limits<Counter>::max)()),
-		"Counter is too narrow to hold LeastMaxValue permits");
+	using store_type = typename decltype(semaphore_store_for<LeastMaxValue, Counter>())::type;
+	static_assert(::std::cmp_less_equal(LeastMaxValue, store_type::max()),
+		"the store is too narrow to hold LeastMaxValue permits");
 
-	using counter_type = Counter;
-	using core_type = acquire_core<counter_store<Counter>>;
-	static constexpr Counter max() noexcept { return counter_store<Counter>::max(); }
+	using core_type = acquire_core<store_type>;
+	static constexpr auto max() noexcept { return store_type::max(); }
 
 	using acquire_sender = typename core_type::acquire_sender;
 
@@ -90,7 +138,15 @@ public:
 
 	[[nodiscard]] constexpr acquire_sender acquire() noexcept { return _core.acquire(); }
 	[[nodiscard]] bool try_acquire() noexcept { return _core._try_take(); }
-	void release(::std::ptrdiff_t update = 1) noexcept { _core._release_n(update); }
+	void release(::std::ptrdiff_t update = 1) noexcept
+	{
+		// 最常见的 update == 1 直接走单个归还：批量路径要在栈上建本地链表，
+		// 单个路径不需要，也就没有那份栈保护和多余指令。
+		if (update == 1)
+			_core._release();
+		else
+			_core._release_n(update);
+	}
 };
 
 NAGISA_BUILD_LIB_DETAIL_END

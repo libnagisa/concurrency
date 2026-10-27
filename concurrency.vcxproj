@@ -32,6 +32,7 @@
     <ClInclude Include="include\nagisa\concurrency\_semaphore\resource_pool\available_container.h" />
     <ClInclude Include="include\nagisa\concurrency\_semaphore\resource_pool\bounded_resource_pool.h" />
     <ClInclude Include="include\nagisa\concurrency\_semaphore\resource_pool\bounded_stack.h" />
+    <ClInclude Include="include\nagisa\concurrency\_semaphore\resource_pool\single_slot.h" />
     <ClInclude Include="include\nagisa\concurrency\_semaphore\resource_pool\environment.h" />
     <ClInclude Include="include\nagisa\concurrency\_semaphore\resource_pool\resource_pool.h" />
     <ClInclude Include="include\nagisa\concurrency\_semaphore\resource_pool\token.h" />
@@ -128,10 +129,12 @@
     <ClCompile Include="test\resource_pool\move_only_bounded.cpp" />
     <ClCompile Include="test\resource_pool\move_only_unique_ptr.cpp" />
     <ClCompile Include="test\resource_pool\raii.cpp" />
+    <ClCompile Include="test\resource_pool\single_slot.cpp" />
     <ClCompile Include="test\resource_pool\then.cpp" />
     <ClCompile Include="test\resource_pool\token_concept.cpp" />
     <ClCompile Include="test\resource_pool\try_acquire.cpp" />
     <ClCompile Include="test\semaphore\binary.cpp" />
+    <ClCompile Include="test\semaphore\binary_flag.cpp" />
     <ClCompile Include="test\semaphore\cancel_already_stopped.cpp" />
     <ClCompile Include="test\semaphore\cancel_already_stopped_with_permit.cpp" />
     <ClCompile Include="test\semaphore\cancel_waiting.cpp" />

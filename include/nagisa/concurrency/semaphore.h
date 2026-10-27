@@ -5,8 +5,12 @@
 ///
 /// - @c basic_semaphore<LeastMaxValue, Counter> 是核心实现。@c LeastMaxValue 对齐
 ///   std::counting_semaphore：保证至少能容纳这么多个许可，不是精确上限；实际
-///   上限是 @c max()，即 numeric_limits<Counter>::max()（@c Counter 默认
-///   ptrdiff_t）。所以 binary_semaphore 连续 release 两次是合法的，不会失败。
+///   上限是 @c max()，由存储决定：
+///     - @c LeastMaxValue 为 1 且没有显式指定 @c Counter 时，存储就是一个 bool，
+///       和手写的二元信号量一样（没有计数、没有加法、没有上限比较），上限恰好
+///       是 1，所以对已经持有许可的 binary_semaphore 再 release 是前置条件违反。
+///     - 否则是 @c Counter（默认 ptrdiff_t）的计数器，上限是它的 numeric_limits。
+///   显式写 @c Counter 总是得到计数器，即使 @c LeastMaxValue 为 1。
 ///   @c counting_semaphore<LeastMaxValue> 和 @c binary_semaphore（= basic_semaphore<1>）
 ///   都是它的别名，不是独立实现。
 ///   release 超过 max()、构造时 desired 越界、release 传负数是前置条件违反，
@@ -33,7 +37,8 @@
 /// - @c resource_pool<Token, Container> 是带资源的 semaphore：许可就是容器里的
 ///   某个 token。acquire()/try_acquire() 得到一个 @c permit，持有 token，析构时
 ///   自动归还；归还时若有等待者，token 不经过容器，直接交给队首。
-///   @c bounded_resource_pool<Token, N> 是容量固定的版本。
+///   @c bounded_resource_pool<Token, N> 是容量固定的版本；N 为 1 时容器是一个槽
+///   加一个标志位（@c single_slot），和手写的单槽池一样大。
 ///
 /// @c acquire() 的完成信号随容器而定：容器的 empty()/back()/pop_back() 都是
 /// noexcept 时（vector、deque、bounded_stack）只有 set_value/set_stopped；
